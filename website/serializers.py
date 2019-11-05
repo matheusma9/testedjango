@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import *
 from decimal import Decimal
 from django.contrib.auth.models import User
+from drf_extra_fields.fields import Base64ImageField
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -64,17 +65,32 @@ class ClienteSerializer(serializers.ModelSerializer):
 
 
 class LojaSerializer(serializers.ModelSerializer):
+    logo = Base64ImageField()
+
     class Meta:
         model = Loja
         fields = ['id', 'nome_fantasia', 'logo', 'cnpj', 'razao_social']
         read_only_fields = ['id']
 
+    def create(self, validated_data):
+        logo = validated_data.pop('logo')
+        loja = Loja.objects.create(logo=logo, **validated_data)
+        return loja
+
 class ProdutoSerializer(serializers.ModelSerializer):
+    logo = Base64ImageField()
+
     class Meta:
         model = Produto
         fields = ['id','descricao', 'valor', 'logo', 'loja', 'qtd_estoque']
         read_only_fields = ['id']
 
+    def create(self, validated_data):
+        logo = validated_data.pop('logo')
+        produto = Produto.objects.create(logo=logo, **validated_data)
+        return produto
+
+        
 class VendaProdutoSerializer(serializers.ModelSerializer):
     valor = serializers.DecimalField(max_digits=10, decimal_places=2, coerce_to_string=False)
     class Meta:

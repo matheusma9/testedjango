@@ -3,7 +3,6 @@ from django.db.models import F, Sum
 from django.utils import timezone
 from decimal import Decimal
 from django.contrib.auth.models import User
-import uuid
 
 
 # Create your models here.
