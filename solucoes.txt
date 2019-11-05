@@ -1,0 +1,3 @@
+Adicionar host na  url da imagem:
+    http://masnun.com/2015/10/26/django-rest-framework-displaying-full-url-for-imagefield-or-filefield.html
+    Adicionar o contexto na criação do serializer.

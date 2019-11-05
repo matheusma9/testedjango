@@ -6,12 +6,15 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission
 
+
 class IsOwnerdOrCreateOnly(BasePermission):
     """
     The request is authenticated as a user, or is a read-only request.
     """
+
     def has_object_permission(self, request, view, obj):
-        return request.method == 'POST' or obj.user == request.user 
+        return request.method == 'POST' or obj.user == request.user
+
 
 class EnderecoViewSet(viewsets.ModelViewSet):
     """
@@ -22,7 +25,7 @@ class EnderecoViewSet(viewsets.ModelViewSet):
     serializer_class = EnderecoSerializer
     queryset = Endereco.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-    
+
     @action(methods=['get'], detail=True)
     def clientes(self, request, pk):
         """
@@ -33,6 +36,7 @@ class EnderecoViewSet(viewsets.ModelViewSet):
         cliente = Cliente.objects.get(pk=pk)
         serializer_data = VendaSerializer(cliente.vendas.all(), many=True).data
         return Response(serializer_data)
+
 
 class ClienteViewSet(viewsets.ModelViewSet):
     """
@@ -51,7 +55,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
         cliente = Cliente.objects.get(pk=pk)
         serializer_data = VendaSerializer(cliente.vendas.all(), many=True).data
         return Response(serializer_data)
-    
+
 
 class LojaViewSet(viewsets.ModelViewSet):
     """
@@ -61,22 +65,23 @@ class LojaViewSet(viewsets.ModelViewSet):
     queryset = Loja.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
-
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk):
         """
         Obter os produtos de uma loja
         """
         loja = Loja.objects.get(pk=pk)
-        serializer_data = ProdutoSerializer(loja.produtos.all(), many=True).data
+        serializer_data = ProdutoSerializer(
+            loja.produtos.all(), many=True, context={"request": request}).data
         return Response(serializer_data)
 
-class ProdutoViewSet(mixins.CreateModelMixin,  
-                    mixins.ListModelMixin, 
-                    mixins.RetrieveModelMixin, 
-                    mixins.UpdateModelMixin,
-                    viewsets.GenericViewSet):
-    
+
+class ProdutoViewSet(mixins.CreateModelMixin,
+                     mixins.ListModelMixin,
+                     mixins.RetrieveModelMixin,
+                     mixins.UpdateModelMixin,
+                     viewsets.GenericViewSet):
+
     """
     Endpoint relacionado aos produtos.
     """
@@ -84,15 +89,15 @@ class ProdutoViewSet(mixins.CreateModelMixin,
     queryset = Produto.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
-class VendaViewSet(mixins.CreateModelMixin,  
-                    mixins.ListModelMixin, 
-                    mixins.RetrieveModelMixin, 
-                    viewsets.GenericViewSet):
-    
+
+class VendaViewSet(mixins.CreateModelMixin,
+                   mixins.ListModelMixin,
+                   mixins.RetrieveModelMixin,
+                   viewsets.GenericViewSet):
+
     """
     Endpoint relacionado as vendas.
     """
     serializer_class = VendaSerializer
     queryset = Venda.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-    
