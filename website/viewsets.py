@@ -5,6 +5,7 @@ from .serializers import *
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission
+from website.recommender import recommender
 
 
 class IsOwnerdOrCreateOnly(BasePermission):
@@ -47,6 +48,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
     permission_classes = [IsOwnerdOrCreateOnly]
+
     @action(methods=['get'], detail=True)
     def vendas(self, request, pk):
         """
@@ -54,6 +56,24 @@ class ClienteViewSet(viewsets.ModelViewSet):
         """
         cliente = Cliente.objects.get(pk=pk)
         serializer_data = VendaSerializer(cliente.vendas.all(), many=True).data
+        return Response(serializer_data)
+
+    @action(methods=['get'], detail=True)
+    def lojas(self, request, pk):
+        """
+        Obter lojas recomendadas para um usuário.
+        """
+        lojasId = recommender.get_topk_lojas(int(pk))
+        lojas = [Loja.objects.get(id=lojaId) for lojaId in lojasId]
+        serializer_data = LojaSerializer(
+            lojas, many=True, context={"request": request}).data
+        return Response(serializer_data)
+
+    @action(methods=['get'], detail=True)
+    def avaliacoes(self, request, pk):
+        cliente = Cliente.objects.get(pk=pk)
+        serializer_data = AvaliacaoSerializer(
+            cliente.avaliacoes_cliente.all(), many=True, context={"request": request}).data
         return Response(serializer_data)
 
 
@@ -73,6 +93,13 @@ class LojaViewSet(viewsets.ModelViewSet):
         loja = Loja.objects.get(pk=pk)
         serializer_data = ProdutoSerializer(
             loja.produtos.all(), many=True, context={"request": request}).data
+        return Response(serializer_data)
+
+    @action(methods=['get'], detail=True)
+    def avaliacoes(self, request, pk):
+        loja = Loja.objects.get(pk=pk)
+        serializer_data = AvaliacaoSerializer(
+            loja.avaliacoes_loja.all(), many=True, context={"request": request}).data
         return Response(serializer_data)
 
 
@@ -100,4 +127,14 @@ class VendaViewSet(mixins.CreateModelMixin,
     """
     serializer_class = VendaSerializer
     queryset = Venda.objects.all()
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+
+class AvaliacaoViewSet(mixins.CreateModelMixin,
+                       mixins.ListModelMixin,
+                       mixins.RetrieveModelMixin,
+                       viewsets.GenericViewSet):
+
+    serializer_class = AvaliacaoSerializer
+    queryset = Avaliacao.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)

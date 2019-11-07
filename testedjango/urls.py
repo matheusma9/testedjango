@@ -23,6 +23,7 @@ from rest_framework_swagger.views import get_swagger_view
 from website.views import LoginView
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.auth import views as auth_views
 
 schema_view = get_swagger_view(title='Loja API')
 
@@ -32,8 +33,11 @@ router.register(r'clientes', ClienteViewSet)
 router.register(r'lojas', LojaViewSet)
 router.register(r'produtos', ProdutoViewSet)
 router.register(r'vendas', VendaViewSet)
+router.register(r'avaliacoes', AvaliacaoViewSet)
 
 urlpatterns = [
+
+    path('accounts/login/', auth_views.LoginView.as_view()),
     path('admin/', admin.site.urls),
     path('', include(router.urls)),
     path('login/', LoginView.as_view()),
@@ -41,4 +45,5 @@ urlpatterns = [
     path('doc/', schema_view)
 ]
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.MEDIA_URL,
+                          document_root=settings.MEDIA_ROOT)

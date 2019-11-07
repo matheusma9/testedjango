@@ -3,9 +3,12 @@ from django.db.models import F, Sum, Avg
 from django.utils import timezone
 from decimal import Decimal
 from django.contrib.auth.models import User
-
+from django.core.validators import MaxValueValidator, MinValueValidator
+from taggit.managers import TaggableManager
 
 # Create your models here.
+
+
 class ModelDate(models.Model):
     created_at = models.DateTimeField('Criado em', auto_now_add=True)
     update_at = models.DateTimeField('Atualizado em', auto_now=True)
@@ -61,6 +64,9 @@ class Cliente(ModelDate):
     SEXO = (('M', 'Masculino'), ('F', 'Feminino'))
 
     nome = models.CharField('Nome', max_length=50)
+    foto = models.ImageField(
+        upload_to='website/images/profile', verbose_name='Foto',
+        null=True, blank=True)
     sobrenome = models.CharField('Sobrenome', max_length=150)
     cpf = models.IntegerField('CPF', unique=True)
     rg = models.IntegerField('RG', unique=True, blank=True, null=True)
@@ -87,6 +93,12 @@ class Cliente(ModelDate):
         ordering = ['nome']
 
 
+'''
+class Categoria(ModelDate):
+    nome = models.CharField('Nome', max_length=50)
+'''
+
+
 class Loja(ModelDate):
     nome_fantasia = models.CharField('Nome Fantasia', max_length=150)
     cnpj = models.IntegerField('CNPJ', unique=True)
@@ -97,6 +109,7 @@ class Loja(ModelDate):
     logo = models.ImageField(
         upload_to='website/images', verbose_name='Imagem',
         null=True, blank=True)
+    #categorias = models.ManyToManyField(Categoria)
 
     @property
     def rating(self):
@@ -122,6 +135,7 @@ class Produto(ModelDate):
     logo = models.ImageField(
         upload_to='website/images', verbose_name='Imagem',
         null=True, blank=True)
+    tags = TaggableManager()
 
     def __str__(self):
         return self.descricao
@@ -180,5 +194,11 @@ class Avaliacao(ModelDate):
         Cliente, on_delete=models.CASCADE, related_name='avaliacoes_cliente')
     loja = models.ForeignKey(
         Loja, on_delete=models.CASCADE, related_name='avaliacoes_loja')
-    rating = models.FloatField('Rating')
+    rating = models.IntegerField('Rating', default=1, validators=[
+        MaxValueValidator(5),
+        MinValueValidator(1)
+    ])
     comentario = models.TextField('Comentário', blank=True, null=True)
+
+    class Meta:
+        unique_together = (('cliente', 'loja'),)

@@ -3,6 +3,7 @@ from .models import *
 from decimal import Decimal
 from django.contrib.auth.models import User
 from drf_extra_fields.fields import Base64ImageField
+from website.recommender import recommender
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -132,6 +133,14 @@ class VendaSerializer(serializers.ModelSerializer):
             venda_produto = VendaProduto.objects.create(
                 venda=venda, **venda_produto_data)
             venda.valor_total += venda_produto.valor * venda_produto.quantidade
+            produto = venda_produto_data['produto']
+            if produto.qtd_estoque >= venda_produto.quantidade:
+                produto.qtd_estoque -= venda_produto.quantidade
+                produto.save()
+            else:
+                raise serializers.ValidationError(
+                    'O item ' + str(produto) + ' tem uma quantidade em estoque menor do que a desejada')
+
         venda.save()
 
     def create(self, validated_data):
@@ -151,10 +160,18 @@ class AvaliacaoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Avaliacao
-        fields = ['loja', 'rating']
+        fields = ['cliente', 'loja', 'rating', 'comentario']
+        read_only_fields = ['cliente']
 
     def create(self, validated_data):
+        print(validated_data)
         user = self.context['request'].user
         cliente = Cliente.objects.get(user=user)
-        avaliacao = Avaliacao.objects.create(cliente=cliente, **validated_data)
+        loja = validated_data['loja']
+        avaliacao, _ = Avaliacao.objects.get_or_create(
+            cliente=cliente, loja=loja)
+        avaliacao.rating = validated_data['rating']
+        avaliacao.comentario = validated_data['comentario']
+        avaliacao.save()
+        recommender.fit()
         return avaliacao
