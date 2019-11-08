@@ -4,6 +4,9 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from drf_extra_fields.fields import Base64ImageField
 from website.recommender import recommender
+from taggit_serializer.serializers import (TagListSerializerField,
+                                           TaggitSerializer)
+from slugify import slugify
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -28,15 +31,18 @@ class EnderecoSerializer(serializers.ModelSerializer):
 class ClienteSerializer(serializers.ModelSerializer):
     user = UserSerializer()
     endereco = EnderecoSerializer()
+    foto = Base64ImageField()
     data_nascimento = serializers.DateField(format="%d/%m/%Y")
 
     class Meta:
         model = Cliente
-        fields = ['user', 'id', 'nome', 'sobrenome', 'cpf',
+        fields = ['user', 'foto', 'id', 'nome', 'sobrenome', 'cpf',
                   'rg', 'data_nascimento', 'sexo', 'endereco']
         read_only_fields = ['id']
+        extra_kwargs = {'foto': {'required': False}}
 
     def create(self, validated_data):
+        foto = validated_data.pop('foto')
         usuario_data = validated_data.pop('user')
         if not usuario_data['email']:
             raise serializers.ValidationError('O campo email é obrigatório')
@@ -44,7 +50,7 @@ class ClienteSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**usuario_data)
         endereco, _ = Endereco.objects.get_or_create(**endereco_data)
         cliente = Cliente.objects.create(
-            user=user, endereco=endereco, **validated_data)
+            user=user, endereco=endereco, foto=foto, **validated_data)
         return cliente
 
     def update_endereco(self, instance, endereco):
@@ -59,11 +65,14 @@ class ClienteSerializer(serializers.ModelSerializer):
             instance.endereco.save()
 
     def update(self, instance, validated_data):
-        instance.user.email = validated_data['user'].get(
-            'email', instance.user.email)
-        instance.user.set_password(validated_data['user'].get(
-            'password', instance.user.password))
-        instance.user.save()
+        instance.foto = validated_data.get('foto', instance.foto)
+        user = validated_data.get('user', None)
+        if user:
+            instance.user.email = validated_data['user'].get(
+                'email', instance.user.email)
+            instance.user.set_password(validated_data['user'].get(
+                'password', instance.user.password))
+            instance.user.save()
         instance.nome = validated_data.get('nome', instance.nome)
         instance.sobrenome = validated_data.get(
             'sobrenome', instance.sobrenome)
@@ -73,39 +82,98 @@ class ClienteSerializer(serializers.ModelSerializer):
             'data_nascimento', instance.data_nascimento)
         instance.sexo = validated_data.get('sexo', instance.sexo)
         self.update_endereco(instance, validated_data.get('endereco', None))
+        instance.save()
         return instance
+
+
+class CategoriaSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Categoria
+        fields = ['nome', 'slug']
+        read_only_fields = ['slug']
+
+    def create(self, validated_data):
+
+        nome = validated_data.pop('nome')
+        slug = slugify(nome)
+        categoria = Categoria.objects.create(nome=nome, slug=slug)
+        return categoria
 
 
 class LojaSerializer(serializers.ModelSerializer):
     logo = Base64ImageField()
+    categorias = CategoriaSerializer(many=True)
 
     class Meta:
         model = Loja
-        fields = ['id', 'nome_fantasia', 'logo', 'cnpj', 'razao_social']
+        fields = ['id', 'nome_fantasia', 'logo',
+                  'cnpj', 'razao_social', 'categorias']
         read_only_fields = ['id']
 
     def create(self, validated_data):
         logo = validated_data.pop('logo')
         loja = Loja.objects.create(logo=logo, **validated_data)
+        categorias = validated_data.pop('categorias')
+        for categoria in categorias:
+            c, _ = Categoria.objects.get_or_create(**categoria)
+            loja.categorias.add(c)
+        loja.save()
         return loja
+
+    def update(self, instance, validated_data):
+        self.instance.nome_fantasia = validated_data.get(
+            'nome_fantasia', self.instance.nome_fantasia)
+        self.instance.cnpj = validated_data.get('cnpj', self.instance.cnpj)
+        self.instance.logo = validated_data.get('logo', self.instance.logo)
+        self.instance.razao_social = validated_data.get(
+            'razao_social', self.instance.razao_social)
+        categorias = validated_data.get('categorias', None)
+        if categorias:
+            for categoria in categorias:
+                c, _ = Categoria.objects.get_or_create(**categoria)
+                self.instance.categorias.add(c)
+        self.instance.save()
+        return instance
 
 
 class ProdutoSerializer(serializers.ModelSerializer):
     logo = Base64ImageField()
+    categorias = CategoriaSerializer(many=True)
 
     class Meta:
         model = Produto
-        fields = ['id', 'descricao', 'valor', 'logo', 'loja', 'qtd_estoque']
+        fields = ['id', 'descricao', 'valor',
+                  'logo', 'loja', 'qtd_estoque', 'categorias']
         read_only_fields = ['id']
-
-    def get_logo(self, object):
-        print(object.logo)
-        return None
+        extra_kwargs = {'logo': {'allow_blank': True}}
 
     def create(self, validated_data):
         logo = validated_data.pop('logo')
+
         produto = Produto.objects.create(logo=logo, **validated_data)
+        categorias = validated_data.pop('categorias')
+        for categoria in categorias:
+            c, _ = Categoria.objects.get_or_create(**categoria)
+            produto.categorias.add(c)
+        produto.save()
         return produto
+
+    def update(self, instance, validated_data):
+        self.instance.descricao = validated_data.get(
+            'descricao', self.instance.descricao)
+        self.instance.valor = validated_data.get('valor', self.instance.valor)
+        self.instance.logo = validated_data.get('logo', self.instance.logo)
+        self.instance.loja = validated_data.get('loja', self.instance.loja)
+        self.instance.qtd_estoque = validated_data.get(
+            'qtd_estoque', self.instance.qtd_estoque)
+        categorias = validated_data.get('categorias', None)
+        if categorias:
+            for categoria in categorias:
+                c, _ = Categoria.objects.get_or_create(**categoria)
+                self.instance.categorias.add(c)
+        self.instance.save()
+        return instance
 
 
 class VendaProdutoSerializer(serializers.ModelSerializer):

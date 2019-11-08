@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.validators import MaxValueValidator, MinValueValidator
 from taggit.managers import TaggableManager
-
+from slugify import slugify
 # Create your models here.
 
 
@@ -60,6 +60,14 @@ class Endereco(ModelDate):
         return self.cep
 
 
+class Categoria(ModelDate):
+    nome = models.CharField('Nome', max_length=50)
+    slug = models.SlugField(unique=True)
+
+    def __str__(self):
+        return self.nome
+
+
 class Cliente(ModelDate):
     SEXO = (('M', 'Masculino'), ('F', 'Feminino'))
 
@@ -93,12 +101,6 @@ class Cliente(ModelDate):
         ordering = ['nome']
 
 
-'''
-class Categoria(ModelDate):
-    nome = models.CharField('Nome', max_length=50)
-'''
-
-
 class Loja(ModelDate):
     nome_fantasia = models.CharField('Nome Fantasia', max_length=150)
     cnpj = models.IntegerField('CNPJ', unique=True)
@@ -109,7 +111,7 @@ class Loja(ModelDate):
     logo = models.ImageField(
         upload_to='website/images', verbose_name='Imagem',
         null=True, blank=True)
-    #categorias = models.ManyToManyField(Categoria)
+    categorias = models.ManyToManyField(Categoria)
 
     @property
     def rating(self):
@@ -135,10 +137,19 @@ class Produto(ModelDate):
     logo = models.ImageField(
         upload_to='website/images', verbose_name='Imagem',
         null=True, blank=True)
-    tags = TaggableManager()
+    categorias = models.ManyToManyField(Categoria)
 
     def __str__(self):
         return self.descricao
+
+    def add_categoria(self, categoria):
+        c, created = Categoria.objects.get_or_create(
+            nome=categoria, slug=slugify(categoria))
+        if created:
+            self.loja.categorias.add(c)
+            self.loja.save()
+        self.categorias.add(c)
+        self.save()
 
     class Meta:
         verbose_name = 'Produto'
