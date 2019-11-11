@@ -14,6 +14,7 @@ from rest_framework.schemas import AutoSchema
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from .filters import *
+from .schema_view import CustomSchema
 tag_schema = AutoSchema(manual_fields=[coreapi.Field('tags', required=False,
                                                      location='query',
                                                      description='Categorias dos produtos(separadas por virgulas).',
@@ -80,7 +81,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
         """
         try:
             cliente = Cliente.objects.get(pk=pk)
-            return list_response(self, VendaSerializer, clientes.vendas.all(), request)
+            return list_response(self, VendaSerializer, cliente.vendas.all(), request)
         except models.ObjectDoesNotExist:
             raise Http404
 
@@ -110,23 +111,18 @@ class ClienteViewSet(viewsets.ModelViewSet):
 class LojaViewSet(viewsets.ModelViewSet):
     """
     Endpoint relacionado as lojas.
-    ---
-    produtos:
-        omit_serializer: true
-        parameters:
-            - name: tags
-              type: string
     """
     serializer_class = LojaSerializer
     queryset = Loja.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend,
+                       filters.SearchFilter]
     search_fields = ['nome_fantasia']
 
     @action(methods=['get'], detail=True, schema=tag_schema)
     def produtos(self, request, pk):
         """
-        Produtos
+        Produtos de uma loja
         """
         try:
             loja = self.get_queryset().get(pk=pk)
@@ -134,7 +130,7 @@ class LojaViewSet(viewsets.ModelViewSet):
             if slugs:
                 slugs = slugs.split(',')
                 categorias = loja.categorias.filter(slug__in=slugs)
-                qs = loja.produtos.filter(categorias__in=categorias)
+                qs = loja.produtos.filter(categorias__in=categorias).distinct()
             else:
                 qs = loja.produtos.all()
             return list_response(self, ProdutoSerializer, qs, request)
@@ -163,7 +159,8 @@ class LojaViewSet(viewsets.ModelViewSet):
         except models.ObjectDoesNotExist:
             raise Http404
         qs = loja.categorias.all()
-        return list_response(self, CategoriaSerializer, qs, request)
+        return Response(CategoriaSerializer(
+            qs, many=True, context={"request": request}).data)
 
 
 class ProdutoViewSet(mixins.CreateModelMixin,
@@ -173,17 +170,28 @@ class ProdutoViewSet(mixins.CreateModelMixin,
                      viewsets.GenericViewSet):
 
     """
+
+
     Endpoint relacionado aos produtos.
+
+
     """
+    schema = CustomSchema()
     serializer_class = ProdutoSerializer
     queryset = Produto.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-    filterset_fields = ('categorias')
-    filterset_class = ProdutoFilter
 
     def list(self, request, *args, **kwargs):
         """
-        Obter os produtos do Sistema.
+        ---
+        desc:
+         Listar produtos.
+        input:
+        - name: tags
+          desc: Categorias dos produtos(separadas por virgulas).
+          type: string
+          required: false
+          location: query
         """
 
         queryset = self.filter_queryset(self.get_queryset())
@@ -191,7 +199,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
         if slugs:
             slugs = slugs.split(',')
             categorias = Categoria.objects.filter(slug__in=slugs)
-            queryset = queryset.filter(categorias__in=categorias)
+            queryset = queryset.filter(categorias__in=categorias).distinct()
         return list_response(self, self.get_serializer, queryset, request)
 
 
@@ -216,3 +224,10 @@ class AvaliacaoViewSet(mixins.CreateModelMixin,
     serializer_class = AvaliacaoSerializer
     queryset = Avaliacao.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
+
+
+class CategoriaViewSet(viewsets.ModelViewSet):
+    serializer_class = CategoriaSerializer
+    queryset = Categoria.objects.all()
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+    pagination_class = None

@@ -31,7 +31,7 @@ class EnderecoSerializer(serializers.ModelSerializer):
 class ClienteSerializer(serializers.ModelSerializer):
     user = UserSerializer()
     endereco = EnderecoSerializer()
-    foto = Base64ImageField()
+    foto = Base64ImageField(allow_null=True)
     data_nascimento = serializers.DateField(format="%d/%m/%Y")
 
     class Meta:
@@ -39,7 +39,8 @@ class ClienteSerializer(serializers.ModelSerializer):
         fields = ['user', 'foto', 'id', 'nome', 'sobrenome', 'cpf',
                   'rg', 'data_nascimento', 'sexo', 'endereco']
         read_only_fields = ['id']
-        extra_kwargs = {'foto': {'required': False}}
+        extra_kwargs = {'foto': {'required': False,
+                                 'allow_blank': True, 'allow_null': True}}
 
     def create(self, validated_data):
         foto = validated_data.pop('foto')
@@ -102,7 +103,7 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
 
 class LojaSerializer(serializers.ModelSerializer):
-    logo = Base64ImageField()
+    logo = Base64ImageField(allow_null=True)
     categorias = CategoriaSerializer(many=True)
 
     class Meta:
@@ -113,8 +114,9 @@ class LojaSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         logo = validated_data.pop('logo')
-        loja = Loja.objects.create(logo=logo, **validated_data)
         categorias = validated_data.pop('categorias')
+        loja = Loja.objects.create(logo=logo, **validated_data)
+
         for categoria in categorias:
             c, _ = Categoria.objects.get_or_create(**categoria)
             loja.categorias.add(c)
@@ -138,7 +140,7 @@ class LojaSerializer(serializers.ModelSerializer):
 
 
 class ProdutoSerializer(serializers.ModelSerializer):
-    logo = Base64ImageField()
+    logo = Base64ImageField(allow_null=True)
     categorias = CategoriaSerializer(many=True)
 
     class Meta:
@@ -150,9 +152,9 @@ class ProdutoSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         logo = validated_data.pop('logo')
-
-        produto = Produto.objects.create(logo=logo, **validated_data)
         categorias = validated_data.pop('categorias')
+        produto = Produto.objects.create(logo=logo, **validated_data)
+
         for categoria in categorias:
             c, _ = Categoria.objects.get_or_create(**categoria)
             produto.categorias.add(c)

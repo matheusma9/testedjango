@@ -19,13 +19,13 @@ from rest_framework import routers
 from website.viewsets import *
 from rest_framework_jwt.views import obtain_jwt_token, refresh_jwt_token
 from django.views.generic import TemplateView
-from rest_framework_swagger.views import get_swagger_view
+#from rest_framework_swagger.views import get_swagger_view
 from website.views import LoginView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
-
-schema_view = get_swagger_view(title='Loja API')
+from website.schema_view import schema_view
+#schema_view = get_swagger_view(title='Loja API')
 
 router = routers.DefaultRouter()
 router.register(r'enderecos', EnderecoViewSet)
@@ -34,6 +34,7 @@ router.register(r'lojas', LojaViewSet)
 router.register(r'produtos', ProdutoViewSet)
 router.register(r'vendas', VendaViewSet)
 router.register(r'avaliacoes', AvaliacaoViewSet)
+router.register(r'categorias', CategoriaViewSet)
 
 urlpatterns = [
 

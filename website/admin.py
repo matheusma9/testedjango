@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Cliente, Produto, Venda, VendaProduto, Endereco, Loja, Produto, Categoria
+from .models import *
 
 
 class VendaProdutoInline(admin.TabularInline):
@@ -22,3 +22,4 @@ admin.site.register(VendaProduto)
 admin.site.register(Endereco)
 admin.site.register(Loja)
 admin.site.register(Categoria)
+admin.site.register(Avaliacao)

@@ -59,6 +59,11 @@ class Endereco(ModelDate):
     def __str__(self):
         return self.cep
 
+    class Meta:
+        verbose_name = "Endereço"
+        verbose_name_plural = "Endereços"
+        ordering = ['cep']
+
 
 class Categoria(ModelDate):
     nome = models.CharField('Nome', max_length=50)
@@ -211,5 +216,10 @@ class Avaliacao(ModelDate):
     ])
     comentario = models.TextField('Comentário', blank=True, null=True)
 
+    def __str__(self):
+        return '(' + str(self.cliente.user) + ' - ' + str(self.loja) + '): ' + str(self.rating)
+
     class Meta:
         unique_together = (('cliente', 'loja'),)
+        verbose_name = 'Avaliação'
+        verbose_name_plural = 'Avaliações'
