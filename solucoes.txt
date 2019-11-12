@@ -1,3 +1,9 @@
 Adicionar host na  url da imagem:
-    http://masnun.com/2015/10/26/django-rest-framework-displaying-full-url-for-imagefield-or-filefield.html
-    Adicionar o contexto na criação do serializer.
+    -http://masnun.com/2015/10/26/django-rest-framework-displaying-full-url-for-imagefield-or-filefield.html
+    -Adicionar o contexto na criação do serializer.
+
+Untrack files already added to git repository based on .gitignore
+
+	git rm -r --cached .
+	git add .
+	git commit -m ".gitignore fix"
