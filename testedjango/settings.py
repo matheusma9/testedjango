@@ -88,7 +88,7 @@ WSGI_APPLICATION = 'testedjango.wsgi.application'
 default_dburl = 'sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3')
 
 DATABASES = {
-    'de fault': config('DATABASE_URL', default=default_dburl, cast=dburl)
+    'default': config('DATABASE_URL', default=default_dburl, cast=dburl)
 }
 
 
@@ -182,4 +182,5 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 CORS_ORIGIN_ALLOW_ALL = True
-django_heroku.settings(locals())
+
+# django_heroku.settings(locals())

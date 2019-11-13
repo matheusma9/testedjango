@@ -51,4 +51,8 @@ class Recommender:
 
 
 recommender = Recommender()
-recommender.fit()
+
+
+def init_recommender():
+    recommender = Recommender()
+    recommender.fit()

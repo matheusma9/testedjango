@@ -92,6 +92,8 @@ class ClienteViewSet(viewsets.ModelViewSet):
         Obter lojas recomendadas para um usuário.
         """
         try:
+            if not recommender.is_fitted:
+                recommender.fit()
             lojasId = recommender.get_topk_lojas(int(pk))
             lojas = [Loja.objects.get(id=lojaId) for lojaId in lojasId]
             return list_response(self, LojaSerializer, lojas, request)
