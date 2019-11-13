@@ -98,7 +98,8 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
         nome = validated_data.pop('nome')
         slug = slugify(nome)
-        categoria = Categoria.objects.create(nome=nome, slug=slug)
+        categoria = Categoria.objects.create(
+            nome=nome, slug=slug, qtd_acessos=0)
         return categoria
 
 

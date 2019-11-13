@@ -4,7 +4,7 @@ from .models import *
 from .serializers import *
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission, IsAdminUser
 from website.recommender import recommender
 from django.http import Http404
 from rest_framework.filters import BaseFilterBackend
@@ -15,6 +15,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from .filters import *
 from .schema_view import CustomSchema
+from django.db.models import F
 tag_schema = AutoSchema(manual_fields=[coreapi.Field('tags', required=False,
                                                      location='query',
                                                      description='Categorias dos produtos(separadas por virgulas).',
@@ -72,7 +73,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
-    permission_classes = [IsOwnerdOrCreateOnly]
+    permission_classes = (IsOwnerdOrCreateOnly, )
 
     @action(methods=['get'], detail=True)
     def vendas(self, request, pk):
@@ -130,6 +131,7 @@ class LojaViewSet(viewsets.ModelViewSet):
             if slugs:
                 slugs = slugs.split(',')
                 categorias = loja.categorias.filter(slug__in=slugs)
+                categorias.update(qtd_acessos=F('qtd_acessos') + 1)
                 qs = loja.produtos.filter(categorias__in=categorias).distinct()
             else:
                 qs = loja.produtos.all()
@@ -199,6 +201,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
         if slugs:
             slugs = slugs.split(',')
             categorias = Categoria.objects.filter(slug__in=slugs)
+            categorias.update(qtd_acessos=F('qtd_acessos') + 1)
             queryset = queryset.filter(categorias__in=categorias).distinct()
         return list_response(self, self.get_serializer, queryset, request)
 
@@ -231,3 +234,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     queryset = Categoria.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
     pagination_class = None
+
+    @action(methods=['get'], detail=False)
+    def top(self, request, *args, **kwargs):
+        qs = self.queryset.order_by('-qtd_acessos')[:5]
+        serializer = self.serializer_class(qs, many=True)
+        return Response(serializer.data)

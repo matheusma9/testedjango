@@ -68,9 +68,14 @@ class Endereco(ModelDate):
 class Categoria(ModelDate):
     nome = models.CharField('Nome', max_length=50)
     slug = models.SlugField(unique=True)
+    qtd_acessos = models.PositiveIntegerField(
+        'Quantidade de acessos', default=0)
 
     def __str__(self):
         return self.nome
+
+    class Meta:
+        ordering = ['nome']
 
 
 class Cliente(ModelDate):
