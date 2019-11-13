@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
+import django_heroku
 from decouple import config
 import os
 import datetime
@@ -27,7 +28,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['testedjango-meat.herokuapp.com',
+ALLOWED_HOSTS = ['api-loja-django.herokuapp.com',
                  '192.168.137.1', '127.0.0.1', '192.168.15.87', 'localhost']
 
 
@@ -87,7 +88,7 @@ WSGI_APPLICATION = 'testedjango.wsgi.application'
 default_dburl = 'sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3')
 
 DATABASES = {
-    'default': config('DATABASE_URL', default=default_dburl, cast=dburl)
+    'de fault': config('DATABASE_URL', default=default_dburl, cast=dburl)
 }
 
 
@@ -181,3 +182,4 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 CORS_ORIGIN_ALLOW_ALL = True
+django_heroku.settings(locals())
