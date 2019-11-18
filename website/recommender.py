@@ -1,5 +1,5 @@
 import pandas as pd
-from website.models import Avaliacao, Loja, Cliente
+from website.models import AvaliacaoLoja, Loja, Cliente
 import numpy as np
 
 
@@ -10,7 +10,7 @@ class Recommender:
         self.is_fitted = False
 
     def load_rating(self):
-        qs = Avaliacao.objects.all().values_list('cliente_id', 'loja_id', 'rating')
+        qs = AvaliacaoLoja.objects.all().values_list('cliente_id', 'loja_id', 'rating')
         return pd.DataFrame(
             qs, columns=['cliente_id', 'loja_id', 'rating'])
 

@@ -2,6 +2,7 @@ from rest_framework import viewsets
 from rest_framework import generics, mixins
 from .models import *
 from .serializers import *
+from rest_framework.exceptions import NotAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission, IsAdminUser
@@ -166,6 +167,96 @@ class LojaViewSet(viewsets.ModelViewSet):
         return Response(CategoriaSerializer(
             qs, many=True, context={"request": request}).data)
 
+    @action(methods=['post', 'get', 'patch', 'delete'], detail=True)
+    def carrinho(self, request, pk):
+        if request.method == 'GET':
+            if request.user.is_authenticated:
+                try:
+                    loja = self.get_queryset().get(pk=pk)
+                    cliente = Cliente.objects.get(user=request.user)
+                    carrinho, _ = loja.carrinhos.get_or_create(
+                        loja=loja, cliente=cliente)
+                    serializer = CarrinhoSerializer(carrinho)
+                    return Response(serializer.data)
+                except models.ObjectDoesNotExist:
+                    raise Http404
+            else:
+                raise NotAuthenticated()
+        if request.method == 'POST':
+            try:
+                loja = self.get_queryset().get(pk=pk)
+                cliente = Cliente.objects.get(user=request.user)
+                carrinho, created = Carrinho.objects.get_or_create(
+                    loja=loja, cliente=cliente)
+                produto = Produto.objects.get(pk=request.data['produto'])
+                quantidade = request.data['quantidade']
+                if created:
+                    item = ItensCarrinho(produto=produto, carrinho=carrinho,
+                                         valor=produto.valor, quantidade=quantidade)
+                    item.save()
+                    carrinho.itens_carrinho.add(item)
+                    carrinho.save()
+                else:
+                    item, c = carrinho.itens_carrinho.get_or_create(
+                        produto=produto, carrinho=carrinho)
+                    item.valor = produto.valor
+                    if c:
+                        item.quantidade = quantidade
+                    else:
+                        item.quantidade += quantidade
+                    item.save()
+                carrinho.atualizar_valor()
+                serializer = CarrinhoSerializer(carrinho)
+                return Response(serializer.data)
+            except models.ObjectDoesNotExist:
+                raise Http404
+        if request.method == 'PATCH':
+            try:
+                itens = request.data['itens']
+                loja = self.get_queryset().get(pk=pk)
+                carrinho = loja.carrinhos.get(cliente__user=request.user)
+
+                for item in itens:
+                    carrinho.itens_carrinho.filter(
+                        produto__pk=item['produto']).update(quantidade=item['quantidade'])
+                    carrinho.save()
+                carrinho.atualizar_valor()
+                serializer = CarrinhoSerializer(carrinho)
+                return Response(serializer.data)
+            except models.ObjectDoesNotExist:
+                raise Http404
+        if request.method == 'DELETE':
+            try:
+                loja = self.get_queryset().get(pk=pk)
+                carrinho = loja.carrinhos.get(cliente__user=request.user)
+                carrinho.itens_carrinho.filter(
+                    produto__pk=request.data['produto']).delete()
+                carrinho.save()
+                carrinho.atualizar_valor()
+                serializer = CarrinhoSerializer(carrinho)
+                return Response(serializer.data)
+            except models.ObjectDoesNotExist:
+                raise Http404
+
+    @action(methods=['post'], detail=True)
+    def compra(self, request, pk):
+        try:
+            loja = self.get_queryset().get(pk=pk)
+            carrinho = loja.carrinhos.get(cliente__user=request.user)
+            itens = request.data.get('itens', [])
+            for item in itens:
+                carrinho.itens_carrinho.filter(
+                    produto__pk=item['produto']).update(quantidade=item['quantidade'])
+                carrinho.save()
+            carrinho.atualizar_valor()
+            venda = carrinho.to_venda()
+            carrinho.itens_carrinho.all().delete()
+            carrinho.atualizar_valor()
+            serializer = VendaSerializer(venda)
+            return Response(serializer.data)
+        except models.ObjectDoesNotExist:
+            raise Http404
+
 
 class ProdutoViewSet(mixins.CreateModelMixin,
                      mixins.ListModelMixin,
@@ -221,13 +312,23 @@ class VendaViewSet(mixins.CreateModelMixin,
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
 
-class AvaliacaoViewSet(mixins.CreateModelMixin,
-                       mixins.ListModelMixin,
-                       mixins.RetrieveModelMixin,
-                       viewsets.GenericViewSet):
+class AvaliacaoLojaViewSet(mixins.CreateModelMixin,
+                           mixins.ListModelMixin,
+                           mixins.RetrieveModelMixin,
+                           viewsets.GenericViewSet):
 
-    serializer_class = AvaliacaoSerializer
-    queryset = Avaliacao.objects.all()
+    serializer_class = AvaliacaoLojaSerializer
+    queryset = AvaliacaoLoja.objects.all()
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+
+class AvaliacaoProdutoViewSet(mixins.CreateModelMixin,
+                              mixins.ListModelMixin,
+                              mixins.RetrieveModelMixin,
+                              viewsets.GenericViewSet):
+
+    serializer_class = AvaliacaoProdutoSerializer
+    queryset = AvaliacaoProduto.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
 

@@ -1,4 +1,5 @@
 from django.db import models
+from rest_framework import serializers
 from django.db.models import F, Sum, Avg
 from django.utils import timezone
 from decimal import Decimal
@@ -117,7 +118,7 @@ class Loja(ModelDate):
     razao_social = models.CharField(
         'Razão Social', max_length=150, unique=True)
     avaliacoes = models.ManyToManyField(
-        Cliente, related_name='avaliacoes', through='Avaliacao')
+        Cliente, through='AvaliacaoLoja')
     logo = models.ImageField(
         upload_to='website/images', verbose_name='Imagem',
         null=True, blank=True)
@@ -148,6 +149,11 @@ class Produto(ModelDate):
         upload_to='website/images', verbose_name='Imagem',
         null=True, blank=True)
     categorias = models.ManyToManyField(Categoria)
+    avaliacoes = models.ManyToManyField(Cliente, through='AvaliacaoProduto')
+
+    @property
+    def rating(self):
+        return self.avaliacoes_produto.aggregate(rating=Avg('rating'))['rating']
 
     def __str__(self):
         return self.descricao
@@ -167,6 +173,63 @@ class Produto(ModelDate):
         ordering = ['descricao']
 
 
+class Carrinho(ModelDate):
+    cliente = models.ForeignKey(
+        Cliente, on_delete=models.CASCADE, related_name='carrinhos')
+    loja = models.ForeignKey(
+        Loja, on_delete=models.CASCADE, related_name='carrinhos')
+    itens = models.ManyToManyField(Produto, through='ItensCarrinho')
+    valor_total = models.DecimalField(
+        'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
+
+    def atualizar_valor(self):
+        expression = Sum(F('produto__valor') * F('quantidade'),
+                         output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
+        self.valor_total = self.itens_carrinho.aggregate(
+            valor_total=expression)['valor_total'] or Decimal('0.00')
+        self.save()
+
+    def to_venda(self):
+        venda = Venda(cliente=self.cliente, loja=self.loja,
+                      valor_total=self.valor_total)
+        venda.save()
+        for item in self.itens_carrinho.all():
+            if item.quantidade <= item.produto.qtd_estoque:
+                venda_produto = VendaProduto(
+                    venda=venda, produto=item.produto, valor=item.valor, quantidade=item.quantidade)
+                venda_produto.save()
+                venda.vendas_produtos_venda.add(venda_produto)
+            else:
+                venda.vendas_produtos_venda.all().delete()
+                venda.delete()
+                raise serializers.ValidationError(
+                    'O item ' + str(item.produto) + ' tem uma quantidade em estoque menor do que a desejada')
+        for venda_produto in venda.vendas_produtos_venda.all():
+            venda_produto.produto.qtd_estoque -= venda_produto.quantidade
+            venda_produto.produto.save()
+
+        venda.save()
+        return venda
+
+
+class ItensCarrinho(ModelDate):
+    carrinho = models.ForeignKey(
+        Carrinho, on_delete=models.CASCADE, related_name='itens_carrinho')
+    produto = models.ForeignKey(
+        Produto, on_delete=models.CASCADE, related_name='itens_carrinhos')
+    valor = models.DecimalField(
+        'Valor', max_digits=10, decimal_places=2, null=True)
+    quantidade = models.PositiveIntegerField('Quantidade', null=True)
+
+    def __str__(self):
+        return str(self.carrinho.pk) + '-' + self.produto.descricao
+
+    class Meta:
+        verbose_name = 'Item do carrinho'
+        verbose_name_plural = 'Itens dos carrinhos'
+        ordering = ['-update_at']
+
+
 class Venda(ModelDate):
     produtos = models.ManyToManyField(
         Produto, through='VendaProduto', related_name='vendas')
@@ -179,7 +242,7 @@ class Venda(ModelDate):
 
     def atualizar_valor(self):
         expression = Sum(F('valor') * F('quantidade'),
-                         output_field=models.DecimalField(max_digits=10, decimal_places=2))
+                         output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
         self.valor_total = self.vendas_produtos_venda.aggregate(
             valor_total=expression)['valor_total']
         self.save()
@@ -210,11 +273,11 @@ class VendaProduto(ModelDate):
         ordering = ['-update_at']
 
 
-class Avaliacao(ModelDate):
+class AvaliacaoLoja(ModelDate):
     cliente = models.ForeignKey(
-        Cliente, on_delete=models.CASCADE, related_name='avaliacoes_cliente')
+        Cliente, on_delete=models.CASCADE, related_name="avaliacoes_loja")
     loja = models.ForeignKey(
-        Loja, on_delete=models.CASCADE, related_name='avaliacoes_loja')
+        Loja, on_delete=models.CASCADE, related_name="avaliacoes_loja")
     rating = models.IntegerField('Rating', default=1, validators=[
         MaxValueValidator(5),
         MinValueValidator(1)
@@ -226,5 +289,25 @@ class Avaliacao(ModelDate):
 
     class Meta:
         unique_together = (('cliente', 'loja'),)
-        verbose_name = 'Avaliação'
-        verbose_name_plural = 'Avaliações'
+        verbose_name = 'Avaliação da Loja'
+        verbose_name_plural = 'Avaliações das Lojas'
+
+
+class AvaliacaoProduto(ModelDate):
+    cliente = models.ForeignKey(
+        Cliente, on_delete=models.CASCADE, related_name="avaliacoes_produto")
+    produto = models.ForeignKey(
+        Produto, on_delete=models.CASCADE, related_name="avaliacoes_produto")
+    rating = models.IntegerField('Rating', default=1, validators=[
+        MaxValueValidator(5),
+        MinValueValidator(1)
+    ])
+    comentario = models.TextField('Comentário', blank=True, null=True)
+
+    def __str__(self):
+        return '(' + str(self.cliente.user) + ' - ' + str(self.produto) + '): ' + str(self.rating)
+
+    class Meta:
+        unique_together = (('cliente', 'produto'),)
+        verbose_name = 'Avaliação do Produto'
+        verbose_name_plural = 'Avaliações dos Produtos'

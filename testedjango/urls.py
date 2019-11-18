@@ -33,7 +33,8 @@ router.register(r'clientes', ClienteViewSet)
 router.register(r'lojas', LojaViewSet)
 router.register(r'produtos', ProdutoViewSet)
 router.register(r'vendas', VendaViewSet)
-router.register(r'avaliacoes', AvaliacaoViewSet)
+router.register(r'avaliacoes-lojas', AvaliacaoLojaViewSet)
+router.register(r'avaliacoes-produtos', AvaliacaoLojaViewSet)
 router.register(r'categorias', CategoriaViewSet)
 
 urlpatterns = [

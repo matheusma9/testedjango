@@ -1,0 +1,14 @@
+Carrinho
+    - Cada usuário vai ter um carrinho associado a uma loja.
+    - Adicionar um produto no carrinho:
+        1 - Verifica se o produto já está no carrinho
+        2 - Se o produto já está no carrinho, incrementa a quantidade
+        3 - Senão, cria um item e adiciona no carrinho
+    - Comprar itens do carrinho:
+        1- Criar uma venda
+        2 - Para cada produto do carrinho:
+            2.1 - Verifica se a quantidade é menor(ou igual) a quantidade em estoque, se for maior, retornar erro.
+            2.2 - Criar um item da venda para o produto.
+        3 - Salvar venda
+        4 - Retornar venda
+            

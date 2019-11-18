@@ -12,9 +12,9 @@ from slugify import slugify
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'password', 'email']
+        fields = ['id', 'username', 'password', 'email', 'is_staff']
         required_fields = ['email', 'username', 'password']
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'is_staff']
         extra_kwargs = {
             'password': {'write_only': True}
         }
@@ -147,8 +147,8 @@ class ProdutoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor',
-                  'logo', 'loja', 'qtd_estoque', 'categorias']
-        read_only_fields = ['id']
+                  'logo', 'loja', 'qtd_estoque', 'categorias', 'rating']
+        read_only_fields = ['id', 'rating']
         extra_kwargs = {'logo': {'allow_blank': True}}
 
     def create(self, validated_data):
@@ -227,22 +227,55 @@ class VendaSerializer(serializers.ModelSerializer):
         return venda
 
 
-class AvaliacaoSerializer(serializers.ModelSerializer):
+class AvaliacaoLojaSerializer(serializers.ModelSerializer):
 
     class Meta:
-        model = Avaliacao
+        model = AvaliacaoLoja
         fields = ['cliente', 'loja', 'rating', 'comentario']
         read_only_fields = ['cliente']
 
     def create(self, validated_data):
-        print(validated_data)
         user = self.context['request'].user
         cliente = Cliente.objects.get(user=user)
         loja = validated_data['loja']
-        avaliacao, _ = Avaliacao.objects.get_or_create(
+        avaliacao, _ = AvaliacaoLoja.objects.get_or_create(
             cliente=cliente, loja=loja)
         avaliacao.rating = validated_data['rating']
         avaliacao.comentario = validated_data['comentario']
         avaliacao.save()
         recommender.fit()
         return avaliacao
+
+
+class AvaliacaoProdutoSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = AvaliacaoProduto
+        fields = ['cliente', 'produto', 'rating', 'comentario']
+        read_only_fields = ['cliente']
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        cliente = Cliente.objects.get(user=user)
+        produto = validated_data['produto']
+        avaliacao, _ = AvaliacaoProduto.objects.get_or_create(
+            cliente=cliente, loja=loja)
+        avaliacao.rating = validated_data['rating']
+        avaliacao.comentario = validated_data['comentario']
+        avaliacao.save()
+        return avaliacao
+
+
+class ItensCarrinhoSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ItensCarrinho
+        fields = ['id', 'valor', 'quantidade', 'carrinho', 'produto']
+
+
+class CarrinhoSerializer(serializers.ModelSerializer):
+    itens = ItensCarrinhoSerializer(source="itens_carrinho", many=True)
+
+    class Meta:
+        model = Carrinho
+        fields = ['id', 'valor_total', 'cliente', 'loja', 'itens']
