@@ -1,5 +1,5 @@
 import pandas as pd
-from website.models import AvaliacaoLoja, Loja, Cliente
+from website.models import AvaliacaoProduto, Produto, Cliente
 import numpy as np
 
 
@@ -10,18 +10,10 @@ class Recommender:
         self.is_fitted = False
 
     def load_rating(self):
-        qs = AvaliacaoLoja.objects.all().values_list('cliente_id', 'loja_id', 'rating')
-        return pd.DataFrame(
-            qs, columns=['cliente_id', 'loja_id', 'rating'])
+        raise NotImplementedError
 
     def create_ratings_u_i(self, df_ratings):
-        n_users = Cliente.objects.count()
-        n_items = Loja.objects.count()
-        ratings = np.zeros((n_users, n_items))
-
-        for row in df_ratings.itertuples():
-            ratings[row[1]-1, row[2]-1] = row[3]
-        return ratings
+        raise NotImplementedError
 
     def compute_similarity(self, ratings, epsilon=1e-9):
         sim = ratings.dot(ratings.T) + epsilon
@@ -46,11 +38,46 @@ class Recommender:
         self.compute_pred(ratings, similarity)
         self.is_fitted = True
 
-    def get_topk_lojas(self, userId, k=5):
+    def get_topk(self, userId, k=5):
         return np.argsort(self.pred[userId-1, :])[:-k-1:-1] + 1
 
 
-recommender = Recommender()
+class RecommenderLoja(Recommender):
+
+    def load_rating(self):
+        qs = AvaliacaoLoja.objects.all().values_list('cliente_id', 'loja_id', 'rating')
+        return pd.DataFrame(
+            qs, columns=['cliente_id', 'loja_id', 'rating'])
+
+    def create_ratings_u_i(self, df_ratings):
+        n_users = Cliente.objects.count()
+        n_items = Loja.objects.count()
+        ratings = np.zeros((n_users, n_items))
+
+        for row in df_ratings.itertuples():
+            ratings[row[1]-1, row[2]-1] = row[3]
+        return ratings
+
+
+class RecommenderProduto(Recommender):
+
+    def load_rating(self):
+        qs = AvaliacaoProduto.objects.all().values_list(
+            'cliente_id', 'produto_id', 'rating')
+        return pd.DataFrame(
+            qs, columns=['cliente_id', 'produto_id', 'rating'])
+
+    def create_ratings_u_i(self, df_ratings):
+        n_users = Cliente.objects.count()
+        n_items = Produto.objects.count()
+        ratings = np.zeros((n_users, n_items))
+
+        for row in df_ratings.itertuples():
+            ratings[row[1]-1, row[2]-1] = row[3]
+        return ratings
+
+
+recommender_produtos = RecommenderProduto()
 
 
 def init_recommender():

@@ -3,10 +3,27 @@ from .models import *
 from decimal import Decimal
 from django.contrib.auth.models import User
 from drf_extra_fields.fields import Base64ImageField
-from website.recommender import recommender
+from website.recommender import recommender_produtos
 from taggit_serializer.serializers import (TagListSerializerField,
                                            TaggitSerializer)
 from slugify import slugify
+
+
+class ItensCarrinhoSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ItensCarrinho
+        fields = ['id', 'valor', 'quantidade', 'produto']
+        read_only_fields = ['id']
+
+
+class CarrinhoSerializer(serializers.ModelSerializer):
+    itens = ItensCarrinhoSerializer(source="itens_carrinho", many=True)
+
+    class Meta:
+        model = Carrinho
+        fields = ['id', 'valor_total', 'itens']
+        read_only_fields = ['id']
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -95,49 +112,11 @@ class CategoriaSerializer(serializers.ModelSerializer):
         read_only_fields = ['slug']
 
     def create(self, validated_data):
-
         nome = validated_data.pop('nome')
         slug = slugify(nome)
         categoria = Categoria.objects.create(
             nome=nome, slug=slug, qtd_acessos=0)
         return categoria
-
-
-class LojaSerializer(serializers.ModelSerializer):
-    logo = Base64ImageField(allow_null=True)
-    categorias = CategoriaSerializer(many=True)
-
-    class Meta:
-        model = Loja
-        fields = ['id', 'nome_fantasia', 'logo',
-                  'cnpj', 'razao_social', 'categorias']
-        read_only_fields = ['id']
-
-    def create(self, validated_data):
-        logo = validated_data.pop('logo')
-        categorias = validated_data.pop('categorias')
-        loja = Loja.objects.create(logo=logo, **validated_data)
-
-        for categoria in categorias:
-            c, _ = Categoria.objects.get_or_create(**categoria)
-            loja.categorias.add(c)
-        loja.save()
-        return loja
-
-    def update(self, instance, validated_data):
-        self.instance.nome_fantasia = validated_data.get(
-            'nome_fantasia', self.instance.nome_fantasia)
-        self.instance.cnpj = validated_data.get('cnpj', self.instance.cnpj)
-        self.instance.logo = validated_data.get('logo', self.instance.logo)
-        self.instance.razao_social = validated_data.get(
-            'razao_social', self.instance.razao_social)
-        categorias = validated_data.get('categorias', None)
-        if categorias:
-            for categoria in categorias:
-                c, _ = Categoria.objects.get_or_create(**categoria)
-                self.instance.categorias.add(c)
-        self.instance.save()
-        return instance
 
 
 class ProdutoSerializer(serializers.ModelSerializer):
@@ -147,7 +126,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor',
-                  'logo', 'loja', 'qtd_estoque', 'categorias', 'rating']
+                  'logo', 'qtd_estoque', 'categorias', 'rating']
         read_only_fields = ['id', 'rating']
         extra_kwargs = {'logo': {'allow_blank': True}}
 
@@ -167,7 +146,6 @@ class ProdutoSerializer(serializers.ModelSerializer):
             'descricao', self.instance.descricao)
         self.instance.valor = validated_data.get('valor', self.instance.valor)
         self.instance.logo = validated_data.get('logo', self.instance.logo)
-        self.instance.loja = validated_data.get('loja', self.instance.loja)
         self.instance.qtd_estoque = validated_data.get(
             'qtd_estoque', self.instance.qtd_estoque)
         categorias = validated_data.get('categorias', None)
@@ -196,7 +174,7 @@ class VendaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Venda
-        fields = ['id', 'cliente', 'loja', 'valor_total', 'vendas_produtos']
+        fields = ['id', 'cliente', 'valor_total', 'vendas_produtos']
         read_only_fields = ['id', 'valor_total', 'cliente']
 
     def criar_vendas_produtos(self, vendas_produtos_data, venda):
@@ -211,40 +189,17 @@ class VendaSerializer(serializers.ModelSerializer):
             else:
                 raise serializers.ValidationError(
                     'O item ' + str(produto) + ' tem uma quantidade em estoque menor do que a desejada')
-
         venda.save()
 
     def create(self, validated_data):
         user = self.context['request'].user
         cliente = Cliente.objects.get(user=user)
-
         vendas_produtos_data = validated_data['vendas_produtos_venda']
         del validated_data['vendas_produtos_venda']
         validated_data['valor_total'] = Decimal('0.0')
-
         venda = Venda.objects.create(cliente=cliente, **validated_data)
         self.criar_vendas_produtos(vendas_produtos_data, venda)
         return venda
-
-
-class AvaliacaoLojaSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = AvaliacaoLoja
-        fields = ['cliente', 'loja', 'rating', 'comentario']
-        read_only_fields = ['cliente']
-
-    def create(self, validated_data):
-        user = self.context['request'].user
-        cliente = Cliente.objects.get(user=user)
-        loja = validated_data['loja']
-        avaliacao, _ = AvaliacaoLoja.objects.get_or_create(
-            cliente=cliente, loja=loja)
-        avaliacao.rating = validated_data['rating']
-        avaliacao.comentario = validated_data['comentario']
-        avaliacao.save()
-        recommender.fit()
-        return avaliacao
 
 
 class AvaliacaoProdutoSerializer(serializers.ModelSerializer):
@@ -259,23 +214,9 @@ class AvaliacaoProdutoSerializer(serializers.ModelSerializer):
         cliente = Cliente.objects.get(user=user)
         produto = validated_data['produto']
         avaliacao, _ = AvaliacaoProduto.objects.get_or_create(
-            cliente=cliente, loja=loja)
+            cliente=cliente, produto=produto)
         avaliacao.rating = validated_data['rating']
         avaliacao.comentario = validated_data['comentario']
         avaliacao.save()
+        recommender_produtos.fit()
         return avaliacao
-
-
-class ItensCarrinhoSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = ItensCarrinho
-        fields = ['id', 'valor', 'quantidade', 'carrinho', 'produto']
-
-
-class CarrinhoSerializer(serializers.ModelSerializer):
-    itens = ItensCarrinhoSerializer(source="itens_carrinho", many=True)
-
-    class Meta:
-        model = Carrinho
-        fields = ['id', 'valor_total', 'cliente', 'loja', 'itens']

@@ -2,11 +2,11 @@ from rest_framework import viewsets
 from rest_framework import generics, mixins
 from .models import *
 from .serializers import *
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import NotAuthenticated, ValidationError
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission, IsAdminUser
-from website.recommender import recommender
+from website.recommender import recommender_produtos
 from django.http import Http404
 from rest_framework.filters import BaseFilterBackend
 import coreapi
@@ -16,7 +16,9 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from .filters import *
 from .schema_view import CustomSchema
-from django.db.models import F
+from django.db.models import F, Count
+from rest_framework import status
+
 tag_schema = AutoSchema(manual_fields=[coreapi.Field('tags', required=False,
                                                      location='query',
                                                      description='Categorias dos produtos(separadas por virgulas).',
@@ -88,16 +90,16 @@ class ClienteViewSet(viewsets.ModelViewSet):
             raise Http404
 
     @action(methods=['get'], detail=True)
-    def lojas(self, request, pk):
+    def produtos(self, request, pk):
         """
-        Obter lojas recomendadas para um usuário.
+        Obter produtos recomendados para um usuário.
         """
         try:
-            if not recommender.is_fitted:
-                recommender.fit()
-            lojasId = recommender.get_topk_lojas(int(pk))
-            lojas = [Loja.objects.get(id=lojaId) for lojaId in lojasId]
-            return list_response(self, LojaSerializer, lojas, request)
+            if not recommender_produtos.is_fitted:
+                recommender_produtos.fit()
+            produtosId = recommender_produtos.get_topk(int(pk))
+            produtos = Produto.objects.filter(id__in=produtosId)
+            return list_response(self, ProdutoSerializer, produtos, request)
         except models.ObjectDoesNotExist:
             raise Http404
 
@@ -105,144 +107,82 @@ class ClienteViewSet(viewsets.ModelViewSet):
     def avaliacoes(self, request, pk):
         try:
             cliente = Cliente.objects.get(pk=pk)
-            serializer_data = AvaliacaoSerializer(
-                cliente.avaliacoes_cliente.all(), many=True, context={"request": request}).data
-            return Response(serializer_data)
+            return list_response(self, AvaliacaoProdutoSerializer, cliente.avaliacoes_produto.all(), request)
         except models.ObjectDoesNotExist:
             raise Http404
 
-
-class LojaViewSet(viewsets.ModelViewSet):
-    """
-    Endpoint relacionado as lojas.
-    """
-    serializer_class = LojaSerializer
-    queryset = Loja.objects.all()
-    permission_classes = (IsAuthenticatedOrReadOnly,)
-    filter_backends = [DjangoFilterBackend,
-                       filters.SearchFilter]
-    search_fields = ['nome_fantasia']
-
-    @action(methods=['get'], detail=True, schema=tag_schema)
-    def produtos(self, request, pk):
-        """
-        Produtos de uma loja
-        """
+    @action(methods=['post', 'get', 'patch', 'delete'], detail=False)
+    def carrinho(self, request):
         try:
-            loja = self.get_queryset().get(pk=pk)
-            slugs = request.GET.get('tags', None)
-            if slugs:
-                slugs = slugs.split(',')
-                categorias = loja.categorias.filter(slug__in=slugs)
-                categorias.update(qtd_acessos=F('qtd_acessos') + 1)
-                qs = loja.produtos.filter(categorias__in=categorias).distinct()
-            else:
-                qs = loja.produtos.all()
-            return list_response(self, ProdutoSerializer, qs, request)
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['get'], detail=True)
-    def avaliacoes(self, request, pk):
-        """
-        Obter as avaliações de uma loja.
-        """
-        try:
-            loja = self.get_queryset().get(pk=pk)
-        except models.ObjectDoesNotExist:
-            raise Http404
-        qs = loja.avaliacoes_loja.all()
-        return list_response(self, AvaliacaoSerializer, qs, request)
-
-    @action(methods=['get'], detail=True)
-    def categorias(self, request, pk):
-        """
-        Obter as categorias de uma loja.
-        """
-        try:
-            loja = self.get_queryset().get(pk=pk)
-        except models.ObjectDoesNotExist:
-            raise Http404
-        qs = loja.categorias.all()
-        return Response(CategoriaSerializer(
-            qs, many=True, context={"request": request}).data)
-
-    @action(methods=['post', 'get', 'patch', 'delete'], detail=True)
-    def carrinho(self, request, pk):
-        if request.method == 'GET':
             if request.user.is_authenticated:
-                try:
-                    loja = self.get_queryset().get(pk=pk)
-                    cliente = Cliente.objects.get(user=request.user)
-                    carrinho, _ = loja.carrinhos.get_or_create(
-                        loja=loja, cliente=cliente)
-                    serializer = CarrinhoSerializer(carrinho)
-                    return Response(serializer.data)
-                except models.ObjectDoesNotExist:
-                    raise Http404
+                cliente = self.get_queryset().get(user=request.user)
+                error = False
+                message = ''
+                created = False
+                if not cliente.carrinho:
+                    created = True
+                    cliente.carrinho = Carrinho.objects.create()
+                    cliente.save()
+
+                if request.method == 'POST':
+                    produto = Produto.objects.get(pk=request.data['produto'])
+                    if produto.qtd_estoque > 0:
+                        quantidade = request.data['quantidade']
+                        if created:
+                            if produto.qtd_estoque < quantidade:
+                                quantidade = produto.qtd_estoque
+                                error = True
+                                message = 'O item ' + \
+                                    str(produto) + \
+                                    ' tem uma quantidade em estoque menor do que a desejada'
+                            item = ItensCarrinho(produto=produto, carrinho=cliente.carrinho,
+                                                 valor=produto.valor, quantidade=quantidade)
+                            item.save()
+                            cliente.carrinho.itens_carrinho.add(item)
+                            cliente.carrinho.save()
+
+                        else:
+                            item, c = cliente.carrinho.itens_carrinho.get_or_create(
+                                produto=produto, carrinho=cliente.carrinho)
+                            item.valor = produto.valor
+                            if produto.qtd_estoque < ((item.quantidade or 0) + quantidade):
+                                quantidade = 0
+                                item.quantidade = produto.qtd_estoque
+                                error = True
+                                message = 'O item ' + \
+                                    str(produto) + \
+                                    ' tem uma quantidade em estoque menor do que a desejada'
+                            item.quantidade += quantidade
+                            item.save()
+                    else:
+                        message = 'Produto fora de estoque'
+                if request.method == 'PATCH':
+                    itens = request.data['itens']
+                    for item in itens:
+                        cliente.carrinho.itens_carrinho.filter(
+                            produto__pk=item['produto']).update(quantidade=item['quantidade'])
+                        cliente.carrinho.save()
+
+                if request.method == 'DELETE':
+                    cliente.carrinho.itens_carrinho.filter(
+                        produto__pk=request.data['produto']).delete()
+                    cliente.carrinho.save()
+
+                cliente.carrinho.atualizar_valor()
+                serializer = CarrinhoSerializer(cliente.carrinho)
+                data = serializer.data
+                data['message'] = message
+                data['error'] = error
+                return Response(data)
             else:
                 raise NotAuthenticated()
-        if request.method == 'POST':
-            try:
-                loja = self.get_queryset().get(pk=pk)
-                cliente = Cliente.objects.get(user=request.user)
-                carrinho, created = Carrinho.objects.get_or_create(
-                    loja=loja, cliente=cliente)
-                produto = Produto.objects.get(pk=request.data['produto'])
-                quantidade = request.data['quantidade']
-                if created:
-                    item = ItensCarrinho(produto=produto, carrinho=carrinho,
-                                         valor=produto.valor, quantidade=quantidade)
-                    item.save()
-                    carrinho.itens_carrinho.add(item)
-                    carrinho.save()
-                else:
-                    item, c = carrinho.itens_carrinho.get_or_create(
-                        produto=produto, carrinho=carrinho)
-                    item.valor = produto.valor
-                    if c:
-                        item.quantidade = quantidade
-                    else:
-                        item.quantidade += quantidade
-                    item.save()
-                carrinho.atualizar_valor()
-                serializer = CarrinhoSerializer(carrinho)
-                return Response(serializer.data)
-            except models.ObjectDoesNotExist:
-                raise Http404
-        if request.method == 'PATCH':
-            try:
-                itens = request.data['itens']
-                loja = self.get_queryset().get(pk=pk)
-                carrinho = loja.carrinhos.get(cliente__user=request.user)
+        except models.ObjectDoesNotExist:
+            raise Http404
 
-                for item in itens:
-                    carrinho.itens_carrinho.filter(
-                        produto__pk=item['produto']).update(quantidade=item['quantidade'])
-                    carrinho.save()
-                carrinho.atualizar_valor()
-                serializer = CarrinhoSerializer(carrinho)
-                return Response(serializer.data)
-            except models.ObjectDoesNotExist:
-                raise Http404
-        if request.method == 'DELETE':
-            try:
-                loja = self.get_queryset().get(pk=pk)
-                carrinho = loja.carrinhos.get(cliente__user=request.user)
-                carrinho.itens_carrinho.filter(
-                    produto__pk=request.data['produto']).delete()
-                carrinho.save()
-                carrinho.atualizar_valor()
-                serializer = CarrinhoSerializer(carrinho)
-                return Response(serializer.data)
-            except models.ObjectDoesNotExist:
-                raise Http404
-
-    @action(methods=['post'], detail=True)
-    def compra(self, request, pk):
+    @action(methods=['post'], detail=False)
+    def compra(self, request):
         try:
-            loja = self.get_queryset().get(pk=pk)
-            carrinho = loja.carrinhos.get(cliente__user=request.user)
+            carrinho = Carrinho.objects.get(cliente__user=request.user)
             itens = request.data.get('itens', [])
             for item in itens:
                 carrinho.itens_carrinho.filter(
@@ -312,16 +252,6 @@ class VendaViewSet(mixins.CreateModelMixin,
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
 
-class AvaliacaoLojaViewSet(mixins.CreateModelMixin,
-                           mixins.ListModelMixin,
-                           mixins.RetrieveModelMixin,
-                           viewsets.GenericViewSet):
-
-    serializer_class = AvaliacaoLojaSerializer
-    queryset = AvaliacaoLoja.objects.all()
-    permission_classes = (IsAuthenticatedOrReadOnly,)
-
-
 class AvaliacaoProdutoViewSet(mixins.CreateModelMixin,
                               mixins.ListModelMixin,
                               mixins.RetrieveModelMixin,
@@ -343,3 +273,26 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         qs = self.queryset.order_by('-qtd_acessos')[:5]
         serializer = self.serializer_class(qs, many=True)
         return Response(serializer.data)
+
+    @action(methods=['get'], detail=False)
+    def quantidade(self, request, *args, **kwargs):
+        qs = VendaProduto.objects.select_related(
+            'produto').prefetch_related('produto__categorias')
+        qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug')).values(
+            'nome', 'slug').exclude(nome=None).order_by()
+        top_categorias = qs_categorias.annotate(
+            n_vendas=Count('pk')).order_by('-n_vendas')
+        return Response(top_categorias)
+
+    @action(methods=['get'], detail=False)
+    def valor(self, request, *args, **kwargs):
+        qs = VendaProduto.objects.select_related(
+            'produto').prefetch_related('produto__categorias')
+        expression = models.ExpressionWrapper(F('valor')*F('quantidade'), output_field=models.DecimalField(
+            max_digits=10, decimal_places=2, default=Decimal('0.00')))
+        qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug'), valor_total=expression).values(
+            'nome', 'slug', 'valor_total').exclude(nome=None).order_by()
+
+        top_categorias = qs_categorias.annotate(
+            n_vendas=Count('pk')).order_by('-n_vendas')
+        return Response(top_categorias)

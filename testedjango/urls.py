@@ -30,11 +30,9 @@ from website.schema_view import schema_view
 router = routers.DefaultRouter()
 router.register(r'enderecos', EnderecoViewSet)
 router.register(r'clientes', ClienteViewSet)
-router.register(r'lojas', LojaViewSet)
 router.register(r'produtos', ProdutoViewSet)
 router.register(r'vendas', VendaViewSet)
-router.register(r'avaliacoes-lojas', AvaliacaoLojaViewSet)
-router.register(r'avaliacoes-produtos', AvaliacaoLojaViewSet)
+router.register(r'avaliacoes-produtos', AvaliacaoProdutoViewSet)
 router.register(r'categorias', CategoriaViewSet)
 
 urlpatterns = [

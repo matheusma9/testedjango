@@ -79,6 +79,96 @@ class Categoria(ModelDate):
         ordering = ['nome']
 
 
+class Produto(ModelDate):
+    descricao = models.CharField('Descrição', max_length=100)
+    valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
+    qtd_estoque = models.IntegerField('Quantidade em estoque')
+    descricao_completa = models.TextField(
+        'Descrição Completa', blank=True, null=True)
+    logo = models.ImageField(
+        upload_to='website/images', verbose_name='Imagem',
+        null=True, blank=True)
+    categorias = models.ManyToManyField(
+        'website.Categoria', related_name='produtos')
+    avaliacoes = models.ManyToManyField(
+        'website.Cliente', through='AvaliacaoProduto')
+
+    @property
+    def rating(self):
+        return self.avaliacoes_produto.aggregate(rating=Avg('rating'))['rating'] or Decimal('0.00')
+
+    def __str__(self):
+        return self.descricao
+
+    def add_categoria(self, categoria):
+        c, created = Categoria.objects.get_or_create(
+            nome=categoria, slug=slugify(categoria))
+        self.categorias.add(c)
+        self.save()
+
+    class Meta:
+        verbose_name = 'Produto'
+        verbose_name_plural = 'Produtos'
+        ordering = ['descricao']
+
+
+class Carrinho(ModelDate):
+    itens = models.ManyToManyField('website.Produto', through='ItensCarrinho')
+    valor_total = models.DecimalField(
+        'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
+
+    def atualizar_valor(self):
+        expression = Sum(F('produto__valor') * F('quantidade'),
+                         output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
+        self.valor_total = self.itens_carrinho.aggregate(
+            valor_total=expression)['valor_total'] or Decimal('0.00')
+        self.save()
+
+    def to_venda(self):
+        venda = Venda(cliente=self.cliente,
+                      valor_total=self.valor_total)
+        venda.save()
+        for item in self.itens_carrinho.all():
+            if item.produto.qtd_estoque <= 0:
+                venda.delete()
+                raise serializers.ValidationError(
+                    'O item ' + str(item.produto) + ' está fora de estoque.')
+            if item.quantidade <= item.produto.qtd_estoque:
+                venda_produto = VendaProduto(
+                    venda=venda, produto=item.produto, valor=item.valor, quantidade=item.quantidade)
+                venda_produto.save()
+                venda.vendas_produtos_venda.add(venda_produto)
+            else:
+                venda.vendas_produtos_venda.all().delete()
+                venda.delete()
+                raise serializers.ValidationError(
+                    'O item ' + str(item.produto) + ' tem uma quantidade em estoque menor do que a desejada')
+
+        for venda_produto in venda.vendas_produtos_venda.all():
+            venda_produto.produto.qtd_estoque -= venda_produto.quantidade
+            venda_produto.produto.save()
+        venda.save()
+        return venda
+
+
+class ItensCarrinho(ModelDate):
+    carrinho = models.ForeignKey(
+        'website.Carrinho', on_delete=models.CASCADE, related_name='itens_carrinho')
+    produto = models.ForeignKey(
+        'website.Produto', on_delete=models.CASCADE, related_name='itens_carrinhos')
+    valor = models.DecimalField(
+        'Valor', max_digits=10, decimal_places=2, null=True)
+    quantidade = models.PositiveIntegerField('Quantidade', null=True)
+
+    def __str__(self):
+        return str(self.carrinho.pk) + '-' + self.produto.descricao
+
+    class Meta:
+        verbose_name = 'Item do carrinho'
+        verbose_name_plural = 'Itens dos carrinhos'
+        ordering = ['-update_at']
+
+
 class Cliente(ModelDate):
     SEXO = (('M', 'Masculino'), ('F', 'Feminino'))
 
@@ -96,6 +186,9 @@ class Cliente(ModelDate):
         Endereco, on_delete=models.CASCADE, related_name='clientes')
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name='cliente')
+    carrinho = models.OneToOneField(
+        'website.Carrinho', on_delete=models.CASCADE, null=True, blank=True
+    )
 
     @property
     def idade(self):
@@ -112,131 +205,11 @@ class Cliente(ModelDate):
         ordering = ['nome']
 
 
-class Loja(ModelDate):
-    nome_fantasia = models.CharField('Nome Fantasia', max_length=150)
-    cnpj = models.IntegerField('CNPJ', unique=True)
-    razao_social = models.CharField(
-        'Razão Social', max_length=150, unique=True)
-    avaliacoes = models.ManyToManyField(
-        Cliente, through='AvaliacaoLoja')
-    logo = models.ImageField(
-        upload_to='website/images', verbose_name='Imagem',
-        null=True, blank=True)
-    categorias = models.ManyToManyField(Categoria)
-
-    @property
-    def rating(self):
-        return self.avaliacoes_loja.aggregate(rating=Avg('rating'))['rating']
-
-    def __str__(self):
-        return self.nome_fantasia
-
-    class Meta:
-        verbose_name = 'Loja'
-        verbose_name_plural = 'Lojas'
-        ordering = ['nome_fantasia']
-
-
-class Produto(ModelDate):
-    descricao = models.CharField('Descrição', max_length=100)
-    valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
-    loja = models.ForeignKey(
-        Loja, on_delete=models.CASCADE, related_name='produtos')
-    qtd_estoque = models.IntegerField('Quantidade em estoque')
-    descricao_completa = models.TextField(
-        'Descrição Completa', blank=True, null=True)
-    logo = models.ImageField(
-        upload_to='website/images', verbose_name='Imagem',
-        null=True, blank=True)
-    categorias = models.ManyToManyField(Categoria)
-    avaliacoes = models.ManyToManyField(Cliente, through='AvaliacaoProduto')
-
-    @property
-    def rating(self):
-        return self.avaliacoes_produto.aggregate(rating=Avg('rating'))['rating']
-
-    def __str__(self):
-        return self.descricao
-
-    def add_categoria(self, categoria):
-        c, created = Categoria.objects.get_or_create(
-            nome=categoria, slug=slugify(categoria))
-        if created:
-            self.loja.categorias.add(c)
-            self.loja.save()
-        self.categorias.add(c)
-        self.save()
-
-    class Meta:
-        verbose_name = 'Produto'
-        verbose_name_plural = 'Produtos'
-        ordering = ['descricao']
-
-
-class Carrinho(ModelDate):
-    cliente = models.ForeignKey(
-        Cliente, on_delete=models.CASCADE, related_name='carrinhos')
-    loja = models.ForeignKey(
-        Loja, on_delete=models.CASCADE, related_name='carrinhos')
-    itens = models.ManyToManyField(Produto, through='ItensCarrinho')
-    valor_total = models.DecimalField(
-        'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
-
-    def atualizar_valor(self):
-        expression = Sum(F('produto__valor') * F('quantidade'),
-                         output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
-        self.valor_total = self.itens_carrinho.aggregate(
-            valor_total=expression)['valor_total'] or Decimal('0.00')
-        self.save()
-
-    def to_venda(self):
-        venda = Venda(cliente=self.cliente, loja=self.loja,
-                      valor_total=self.valor_total)
-        venda.save()
-        for item in self.itens_carrinho.all():
-            if item.quantidade <= item.produto.qtd_estoque:
-                venda_produto = VendaProduto(
-                    venda=venda, produto=item.produto, valor=item.valor, quantidade=item.quantidade)
-                venda_produto.save()
-                venda.vendas_produtos_venda.add(venda_produto)
-            else:
-                venda.vendas_produtos_venda.all().delete()
-                venda.delete()
-                raise serializers.ValidationError(
-                    'O item ' + str(item.produto) + ' tem uma quantidade em estoque menor do que a desejada')
-        for venda_produto in venda.vendas_produtos_venda.all():
-            venda_produto.produto.qtd_estoque -= venda_produto.quantidade
-            venda_produto.produto.save()
-
-        venda.save()
-        return venda
-
-
-class ItensCarrinho(ModelDate):
-    carrinho = models.ForeignKey(
-        Carrinho, on_delete=models.CASCADE, related_name='itens_carrinho')
-    produto = models.ForeignKey(
-        Produto, on_delete=models.CASCADE, related_name='itens_carrinhos')
-    valor = models.DecimalField(
-        'Valor', max_digits=10, decimal_places=2, null=True)
-    quantidade = models.PositiveIntegerField('Quantidade', null=True)
-
-    def __str__(self):
-        return str(self.carrinho.pk) + '-' + self.produto.descricao
-
-    class Meta:
-        verbose_name = 'Item do carrinho'
-        verbose_name_plural = 'Itens dos carrinhos'
-        ordering = ['-update_at']
-
-
 class Venda(ModelDate):
     produtos = models.ManyToManyField(
-        Produto, through='VendaProduto', related_name='vendas')
+        'website.Produto', through='VendaProduto', related_name='vendas')
     cliente = models.ForeignKey(
-        Cliente, on_delete=models.CASCADE, verbose_name='Cliente', related_name='vendas')
-    loja = models.ForeignKey(
-        Loja, on_delete=models.CASCADE, related_name='vendas')
+        'website.Cliente', on_delete=models.CASCADE, verbose_name='Cliente', related_name='vendas')
     valor_total = models.DecimalField(
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
 
@@ -258,9 +231,9 @@ class Venda(ModelDate):
 
 class VendaProduto(ModelDate):
     venda = models.ForeignKey(
-        Venda, on_delete=models.CASCADE, related_name='vendas_produtos_venda')
+        'website.Venda', on_delete=models.CASCADE, related_name='vendas_produtos_venda')
     produto = models.ForeignKey(
-        Produto, on_delete=models.CASCADE, related_name='vendas_produtos_produto')
+        'website.Produto', on_delete=models.CASCADE, related_name='vendas_produtos_produto')
     valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
     quantidade = models.PositiveIntegerField('Quantidade')
 
@@ -273,31 +246,11 @@ class VendaProduto(ModelDate):
         ordering = ['-update_at']
 
 
-class AvaliacaoLoja(ModelDate):
-    cliente = models.ForeignKey(
-        Cliente, on_delete=models.CASCADE, related_name="avaliacoes_loja")
-    loja = models.ForeignKey(
-        Loja, on_delete=models.CASCADE, related_name="avaliacoes_loja")
-    rating = models.IntegerField('Rating', default=1, validators=[
-        MaxValueValidator(5),
-        MinValueValidator(1)
-    ])
-    comentario = models.TextField('Comentário', blank=True, null=True)
-
-    def __str__(self):
-        return '(' + str(self.cliente.user) + ' - ' + str(self.loja) + '): ' + str(self.rating)
-
-    class Meta:
-        unique_together = (('cliente', 'loja'),)
-        verbose_name = 'Avaliação da Loja'
-        verbose_name_plural = 'Avaliações das Lojas'
-
-
 class AvaliacaoProduto(ModelDate):
     cliente = models.ForeignKey(
-        Cliente, on_delete=models.CASCADE, related_name="avaliacoes_produto")
+        'website.Cliente', on_delete=models.CASCADE, related_name="avaliacoes_produto")
     produto = models.ForeignKey(
-        Produto, on_delete=models.CASCADE, related_name="avaliacoes_produto")
+        'website.Produto', on_delete=models.CASCADE, related_name="avaliacoes_produto")
     rating = models.IntegerField('Rating', default=1, validators=[
         MaxValueValidator(5),
         MinValueValidator(1)
