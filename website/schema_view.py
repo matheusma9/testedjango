@@ -11,7 +11,9 @@ class CustomSchema(AutoSchema):
         view = self.view
 
         endpoint_desc = self.view.__doc__
+
         method_name = getattr(view, 'action', method.lower())
+
         method_docstring = getattr(view, method_name, None).__doc__
         if not method_docstring:
             _method_desc = endpoint_desc
@@ -36,21 +38,24 @@ class CustomSchema(AutoSchema):
                 _desc = yaml_doc.get('desc', '')
                 _method_desc = _desc
                 params = yaml_doc.get('input', [])
+                method_action = yaml_doc.get('method_action', '')
+                print(method_action == method)
+                if method_action == '' or method == method_action:
+                    for i in params:
+                        _name = i.get('name')
+                        _desc = i.get('desc')
+                        _required = i.get('required', False)
+                        _type = i.get('type', 'string')
+                        _location = i.get('location', 'form')
+                        field = coreapi.Field(
+                            name=_name,
+                            location=_location,
+                            required=_required,
+                            description=_desc,
+                            type=_type,
 
-                for i in params:
-                    _name = i.get('name')
-                    _desc = i.get('desc')
-                    _required = i.get('required', False)
-                    _type = i.get('type', 'string')
-                    _location = i.get('location', 'form')
-                    field = coreapi.Field(
-                        name=_name,
-                        location=_location,
-                        required=_required,
-                        description=_desc,
-                        type=_type
-                    )
-                    fields.append(field)
+                        )
+                        fields.append(field)
             else:
                 _method_desc = a[0]
                 fields += self.get_serializer_fields(path, method)

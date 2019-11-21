@@ -74,6 +74,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     Endpoint relacionado aos clientes.
 
     """
+    schema = CustomSchema()
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
     permission_classes = (IsOwnerdOrCreateOnly, )
@@ -113,6 +114,19 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     @action(methods=['post', 'get', 'patch', 'delete'], detail=False)
     def carrinho(self, request):
+        """
+        ---
+        method_action:
+         POST
+        desc:
+         Endpoint relaci.
+        input:
+        - name: tags
+          desc: Categorias dos produtos(separadas por virgulas).
+          type: string
+          required: false
+          location: query
+        """
         try:
             if request.user.is_authenticated:
                 cliente = self.get_queryset().get(user=request.user)
