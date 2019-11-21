@@ -110,21 +110,21 @@ class Produto(ModelDate):
     def validar_qtd(self, quantidade, error, messages):
         if self.qtd_estoque == 0:
             messages.append('O item ' +
-                            str(self) + 'está fora de estoque')
+                            str(self) + ' está fora de estoque')
             error = True
             return 0, error, messages
         if self.qtd_estoque < quantidade:
             quantidade = self.qtd_estoque
             error = True
-            message.append('O item ' +
-                           str(self) +
-                           ' tem uma quantidade em estoque menor do que a desejada')
+            messages.append('O item ' +
+                            str(self) +
+                            ' tem uma quantidade em estoque menor do que a desejada')
         if self.qtd_limite < quantidade:
             quantidade = self.qtd_limite
             error = True
-            message.append('O item ' +
-                           str(self) +
-                           ' tem uma quantidade em estoque menor do que a desejada')
+            messages.append('O item ' +
+                            str(self) +
+                            ' tem uma quantidade em estoque menor do que a desejada')
         return quantidade, error, messages
 
     class Meta:

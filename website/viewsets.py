@@ -145,6 +145,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
                             item.save()
                         else:
                             item.delete()
+
                 if request.method == 'PATCH':
                     produto = Produto.objects.get(pk=request.data['produto'])
                     quantidade = request.data['quantidade']
