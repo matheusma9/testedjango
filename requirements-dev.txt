@@ -32,7 +32,6 @@ packaging==19.2
 pandas==0.25.3
 pep8==1.7.1
 Pillow==6.2.1
-pkg-resources
 psycopg2==2.8.4
 pycodestyle==2.5.0
 PyJWT==1.7.1
