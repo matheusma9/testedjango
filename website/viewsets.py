@@ -117,7 +117,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
             if request.user.is_authenticated:
                 cliente = self.get_queryset().get(user=request.user)
                 error = False
-                message = ''
+                messages = []
                 created = False
                 if not cliente.carrinho:
                     created = True
@@ -126,52 +126,43 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
                 if request.method == 'POST':
                     produto = Produto.objects.get(pk=request.data['produto'])
-                    if produto.qtd_estoque > 0:
-                        quantidade = request.data['quantidade']
-                        if created:
-                            if produto.qtd_estoque < quantidade:
-                                quantidade = produto.qtd_estoque
-                                error = True
-                                message = 'O item ' + \
-                                    str(produto) + \
-                                    ' tem uma quantidade em estoque menor do que a desejada'
-                            item = ItensCarrinho(produto=produto, carrinho=cliente.carrinho,
-                                                 valor=produto.valor, quantidade=quantidade)
-                            item.save()
-                            cliente.carrinho.itens_carrinho.add(item)
+                    quantidade = request.data['quantidade']
+                    if created:
+                        quantidade, error, messages = produto.validar_qtd(
+                            quantidade, error, messages)
+                        if quantidade:
+                            cliente.carrinho.itens_carrinho.create(produto=produto, carrinho=cliente.carrinho,
+                                                                   valor=produto.valor, quantidade=quantidade)
                             cliente.carrinho.save()
 
-                        else:
-                            item, c = cliente.carrinho.itens_carrinho.get_or_create(
-                                produto=produto, carrinho=cliente.carrinho)
-                            item.valor = produto.valor
-                            if produto.qtd_estoque < ((item.quantidade or 0) + quantidade):
-                                quantidade = 0
-                                item.quantidade = produto.qtd_estoque
-                                error = True
-                                message = 'O item ' + \
-                                    str(produto) + \
-                                    ' tem uma quantidade em estoque menor do que a desejada'
-                            item.quantidade += quantidade
-                            item.save()
                     else:
-                        message = 'Produto fora de estoque'
+                        item, c = cliente.carrinho.itens_carrinho.get_or_create(
+                            produto=produto, carrinho=cliente.carrinho)
+                        item.valor = produto.valor
+                        item.quantidade, error, messages = produto.validar_qtd(
+                            ((item.quantidade or 0) + quantidade), error, messages)
+                        if item.quantidade:
+                            item.save()
+                        else:
+                            item.delete()
                 if request.method == 'PATCH':
-                    itens = request.data['itens']
-                    for item in itens:
-                        cliente.carrinho.itens_carrinho.filter(
-                            produto__pk=item['produto']).update(quantidade=item['quantidade'])
-                        cliente.carrinho.save()
+                    produto = Produto.objects.get(pk=request.data['produto'])
+                    quantidade = request.data['quantidade']
+                    quantidade, error, messages = produto.validar_qtd(
+                        quantidade, error, messages)
+                    item = cliente.carrinho.itens_carrinho.get(produto=produto)
+                    item.quantidade = quantidade
+                    item.save()
 
                 if request.method == 'DELETE':
-                    cliente.carrinho.itens_carrinho.filter(
-                        produto__pk=request.data['produto']).delete()
-                    cliente.carrinho.save()
+                    produto = Produto.objects.get(pk=request.data['produto'])
+                    item = cliente.carrinho.itens_carrinho.get(produto=produto)
+                    item.delete()
 
                 cliente.carrinho.atualizar_valor()
                 serializer = CarrinhoSerializer(cliente.carrinho)
                 data = serializer.data
-                data['message'] = message
+                data['messages'] = messages
                 data['error'] = error
                 return Response(data)
             else:
@@ -276,8 +267,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
     @action(methods=['get'], detail=False)
     def quantidade(self, request, *args, **kwargs):
-        qs = VendaProduto.objects.select_related(
-            'produto').prefetch_related('produto__categorias')
+        qs = VendaProduto.objects.all()
         qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug')).values(
             'nome', 'slug').exclude(nome=None).order_by()
         top_categorias = qs_categorias.annotate(
@@ -291,8 +281,8 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         expression = models.ExpressionWrapper(F('valor')*F('quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
         qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug'), valor_total=expression).values(
-            'nome', 'slug', 'valor_total').exclude(nome=None).order_by()
+            'nome', 'slug').exclude(nome=None).order_by()
 
         top_categorias = qs_categorias.annotate(
-            n_vendas=Count('pk')).order_by('-n_vendas')
+            n_vendas=Sum('valor_total')).order_by('-n_vendas')
         return Response(top_categorias)

@@ -31,7 +31,12 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = ['api-loja-django.herokuapp.com',
                  '192.168.137.1', '127.0.0.1', '192.168.15.87', 'localhost']
 
-
+INTERNAL_IPS = [
+    # ...
+    '127.0.0.1',
+    '192.168.15.87',
+    # ...
+]
 # Application definition
 
 INSTALLED_APPS = [
@@ -48,6 +53,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'taggit',
     'taggit_serializer',
+    'debug_toolbar',
 ]
 
 MIDDLEWARE = [
@@ -59,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
 ]
 
 ROOT_URLCONF = 'testedjango.urls'

@@ -82,7 +82,8 @@ class Categoria(ModelDate):
 class Produto(ModelDate):
     descricao = models.CharField('Descrição', max_length=100)
     valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
-    qtd_estoque = models.IntegerField('Quantidade em estoque')
+    qtd_estoque = models.PositiveIntegerField('Quantidade em estoque')
+    qtd_limite = models.PositiveIntegerField('Quantidade limite', default=100)
     descricao_completa = models.TextField(
         'Descrição Completa', blank=True, null=True)
     logo = models.ImageField(
@@ -105,6 +106,26 @@ class Produto(ModelDate):
             nome=categoria, slug=slugify(categoria))
         self.categorias.add(c)
         self.save()
+
+    def validar_qtd(self, quantidade, error, messages):
+        if self.qtd_estoque == 0:
+            messages.append('O item ' +
+                            str(self) + 'está fora de estoque')
+            error = True
+            return 0, error, messages
+        if self.qtd_estoque < quantidade:
+            quantidade = self.qtd_estoque
+            error = True
+            message.append('O item ' +
+                           str(self) +
+                           ' tem uma quantidade em estoque menor do que a desejada')
+        if self.qtd_limite < quantidade:
+            quantidade = self.qtd_limite
+            error = True
+            message.append('O item ' +
+                           str(self) +
+                           ' tem uma quantidade em estoque menor do que a desejada')
+        return quantidade, error, messages
 
     class Meta:
         verbose_name = 'Produto'
