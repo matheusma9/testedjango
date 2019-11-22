@@ -116,16 +116,62 @@ class ClienteViewSet(viewsets.ModelViewSet):
     def carrinho(self, request):
         """
         ---
+        method_path:
+         /clientes/carrinho/
         method_action:
          POST
         desc:
-         Endpoint relaci.
+         Adicionar produto no carrinho.
         input:
-        - name: tags
-          desc: Categorias dos produtos(separadas por virgulas).
-          type: string
-          required: false
-          location: query
+        - name: produto
+          desc: Id do produto que vai ser adicionado.
+          type: integer
+          required: True
+          location: form
+        - name: quantidade 
+          desc: Quantidade de itens que serão adicionados.
+          type: integer
+          required: True
+          location: form
+          elements:
+            produto: integer
+            quantidade: integer
+        ---
+        method_path:
+         /clientes/carrinho/
+        method_action:
+         GET
+        desc:
+         Visualizar carrinho de cliente.
+        ---
+        method_action:
+         PATCH
+        desc:
+         Editar produto do carrinho.
+        input:
+        - name: produto
+          desc: Id do produto que vai ser alterado.
+          type: integer
+          required: True
+          location: form
+        - name: quantidade 
+          desc: Nova quantidade de itens.
+          type: integer
+          required: True
+          location: form
+        ---
+        method_path:
+         /clientes/carrinho/
+        method_action:
+         DELETE
+        desc:
+         Remover produto do carrinho.
+        input:
+        - name: produto
+          desc: Id do produto que vai ser removido.
+          type: integer
+          required: True
+          location: form
         """
         try:
             if request.user.is_authenticated:
@@ -187,6 +233,21 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     @action(methods=['post'], detail=False)
     def compra(self, request):
+        """
+        ---
+        method_path:
+         /clientes/compra/
+        method_action:
+         POST
+        desc:
+         Comprar produtos do carrinho.
+        input:
+        - name: itens
+          desc: Lista de itens(produto, quantidade) que serão comprados.
+          type: array
+          required: False
+          location: form
+        """
         try:
             carrinho = Carrinho.objects.get(cliente__user=request.user)
             itens = request.data.get('itens', [])
@@ -269,29 +330,85 @@ class AvaliacaoProdutoViewSet(mixins.CreateModelMixin,
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
+    """
+
+
+    Endpoint relacionado as categorias.
+
+
+    """
     serializer_class = CategoriaSerializer
     queryset = Categoria.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
     pagination_class = None
+    schema = CustomSchema()
 
     @action(methods=['get'], detail=False)
-    def top(self, request, *args, **kwargs):
-        qs = self.queryset.order_by('-qtd_acessos')[:5]
+    def acessos(self, request, *args, **kwargs):
+        """
+        ---
+        method_path:
+         /categorias/acessos/
+        method_action:
+         GET
+        desc:
+         Categorias mais acessadas.
+        input:
+        - name: quantidade
+          desc: Número de categorias listadas.
+          type: integer
+          required: False
+          location: query
+        """
+        n = int(request.GET.get('quantidade', 5))
+        qs = self.queryset.order_by('-qtd_acessos')[:n]
         serializer = self.serializer_class(qs, many=True)
         return Response(serializer.data)
 
     @action(methods=['get'], detail=False)
-    def quantidade(self, request, *args, **kwargs):
-        qs = VendaProduto.objects.all()
+    def compras(self, request, *args, **kwargs):
+        """
+        ---
+        method_path:
+         /categorias/compras/
+        method_action:
+         GET
+        desc:
+         Categorias mais compradas.
+        input:
+        - name: quantidade
+          desc: Número de categorias listadas.
+          type: integer
+          required: False
+          location: query
+        """
+        n = int(request.GET.get('quantidade', 5))
+        qs = ItemVenda.objects.all()
         qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug')).values(
             'nome', 'slug').exclude(nome=None).order_by()
         top_categorias = qs_categorias.annotate(
             n_vendas=Count('pk')).order_by('-n_vendas')
-        return Response(top_categorias)
+        return Response(top_categorias[:n])
 
     @action(methods=['get'], detail=False)
-    def valor(self, request, *args, **kwargs):
-        qs = VendaProduto.objects.select_related(
+    def receita(self, request, *args, **kwargs):
+        """
+        ---
+        method_path:
+         /categorias/receita/
+        method_action:
+         GET
+        desc:
+         Categorias que geraram uma maior receita.
+        input:
+        - name: quantidade
+          desc: Número de categorias listadas.
+          type: integer
+          required: False
+          location: query
+        """
+        n = int(request.GET.get('quantidade', 5))
+        qs = ItemVenda.objects.select_related(
             'produto').prefetch_related('produto__categorias')
         expression = models.ExpressionWrapper(F('valor')*F('quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
@@ -299,5 +416,5 @@ class CategoriaViewSet(viewsets.ModelViewSet):
             'nome', 'slug').exclude(nome=None).order_by()
 
         top_categorias = qs_categorias.annotate(
-            n_vendas=Sum('valor_total')).order_by('-n_vendas')
-        return Response(top_categorias)
+            receita=Sum('valor_total')).order_by('-receita')
+        return Response(top_categorias[:n])

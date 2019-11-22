@@ -9,16 +9,16 @@ from taggit_serializer.serializers import (TagListSerializerField,
 from slugify import slugify
 
 
-class ItensCarrinhoSerializer(serializers.ModelSerializer):
+class ItemCarrinhoSerializer(serializers.ModelSerializer):
 
     class Meta:
-        model = ItensCarrinho
+        model = ItemCarrinho
         fields = ['id', 'valor', 'quantidade', 'produto']
         read_only_fields = ['id']
 
 
 class CarrinhoSerializer(serializers.ModelSerializer):
-    itens = ItensCarrinhoSerializer(source="itens_carrinho", many=True)
+    itens = ItemCarrinhoSerializer(source="itens_carrinho", many=True)
 
     class Meta:
         model = Carrinho
@@ -108,8 +108,8 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Categoria
-        fields = ['nome', 'slug']
-        read_only_fields = ['slug']
+        fields = ['nome', 'slug', 'qtd_acessos']
+        read_only_fields = ['slug', 'qtd_acessos']
 
     def create(self, validated_data):
         nome = validated_data.pop('nome')
@@ -157,34 +157,34 @@ class ProdutoSerializer(serializers.ModelSerializer):
         return instance
 
 
-class VendaProdutoSerializer(serializers.ModelSerializer):
+class ItemVendaSerializer(serializers.ModelSerializer):
     valor = serializers.DecimalField(
         max_digits=10, decimal_places=2, coerce_to_string=False)
 
     class Meta:
-        model = VendaProduto
+        model = ItemVenda
         fields = ['produto', 'valor', 'quantidade']
 
 
 class VendaSerializer(serializers.ModelSerializer):
-    vendas_produtos = VendaProdutoSerializer(
-        source='vendas_produtos_venda', many=True)
+    itens = ItemVendaSerializer(
+        source='itens', many=True)
     valor_total = serializers.DecimalField(
         max_digits=10, decimal_places=2, coerce_to_string=False, read_only=True)
 
     class Meta:
         model = Venda
-        fields = ['id', 'cliente', 'valor_total', 'vendas_produtos']
+        fields = ['id', 'cliente', 'valor_total', 'itens']
         read_only_fields = ['id', 'valor_total', 'cliente']
 
-    def criar_vendas_produtos(self, vendas_produtos_data, venda):
-        for venda_produto_data in vendas_produtos_data:
-            venda_produto = VendaProduto.objects.create(
-                venda=venda, **venda_produto_data)
-            venda.valor_total += venda_produto.valor * venda_produto.quantidade
-            produto = venda_produto_data['produto']
-            if produto.qtd_estoque >= venda_produto.quantidade:
-                produto.qtd_estoque -= venda_produto.quantidade
+    def criar_itens_vendas(self, itens_vendas_data, venda):
+        for item_venda_data in itens_vendas_data:
+            item_venda = ItemVenda.objects.create(
+                venda=venda, **item_venda_data)
+            venda.valor_total += item_venda.valor * item_venda.quantidade
+            produto = item_venda_data['produto']
+            if produto.qtd_estoque >= item_venda.quantidade:
+                produto.qtd_estoque -= item_venda.quantidade
                 produto.save()
             else:
                 raise serializers.ValidationError(
@@ -194,11 +194,11 @@ class VendaSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = self.context['request'].user
         cliente = Cliente.objects.get(user=user)
-        vendas_produtos_data = validated_data['vendas_produtos_venda']
-        del validated_data['vendas_produtos_venda']
+        itens_vendas_data = validated_data['itens']
+        del validated_data['itens']
         validated_data['valor_total'] = Decimal('0.0')
         venda = Venda.objects.create(cliente=cliente, **validated_data)
-        self.criar_vendas_produtos(vendas_produtos_data, venda)
+        self.criar_itens_vendas(itens_vendas_data, venda)
         return venda
 
 

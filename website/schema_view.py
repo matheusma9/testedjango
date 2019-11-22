@@ -2,7 +2,17 @@ from django.utils.six.moves.urllib import parse as urlparse
 from rest_framework.schemas import AutoSchema
 import yaml
 import coreapi
+import coreschema
 from rest_framework_swagger.views import get_swagger_view
+
+
+def simple2schema(stype,  description):
+    if stype == "integer":
+        return coreschema.Integer(description=description)
+    if stype == "string":
+        return coreschema.String(description=description)
+    if stype == "array":
+        return coreschema.Array(description=description)
 
 
 class CustomSchema(AutoSchema):
@@ -26,40 +36,48 @@ class CustomSchema(AutoSchema):
         except:
             fields += self.get_serializer_fields(path, method)
         else:
-            yaml_doc = None
-            if method_docstring:
-                try:
-                    yaml_doc = yaml.load(a[1])
-                except:
-                    yaml_doc = None
 
-            # Extract schema information from yaml
-            if yaml_doc and type(yaml_doc) != str:
-                _desc = yaml_doc.get('desc', '')
-                _method_desc = _desc
-                params = yaml_doc.get('input', [])
-                method_action = yaml_doc.get('method_action', '')
-                print(method_action == method)
-                if method_action == '' or method == method_action:
-                    for i in params:
-                        _name = i.get('name')
-                        _desc = i.get('desc')
-                        _required = i.get('required', False)
-                        _type = i.get('type', 'string')
-                        _location = i.get('location', 'form')
-                        field = coreapi.Field(
-                            name=_name,
-                            location=_location,
-                            required=_required,
-                            description=_desc,
-                            type=_type,
+            for i in range(0, len(a)):
 
-                        )
-                        fields.append(field)
-            else:
-                _method_desc = a[0]
-                fields += self.get_serializer_fields(path, method)
+                yaml_doc = None
+                if method_docstring:
+                    try:
+                        yaml_doc = yaml.load(a[i])
+                    except:
+                        yaml_doc = None
 
+                # Extract schema information from yaml
+                if yaml_doc and type(yaml_doc) != str:
+                    method_action = yaml_doc.get('method_action', '')
+                    method_path = yaml_doc.get('method_path', '')
+                    if (method_action == '' or method == method_action) and (method_path == '' or path == method_path):
+
+                        fields = []
+                        _desc = yaml_doc.get('desc', '')
+
+                        _method_desc = _desc
+                        params = yaml_doc.get('input', [])
+                        for i in params:
+                            _name = i.get('name')
+                            _desc = i.get('desc')
+                            _required = i.get('required', False)
+                            _type = i.get('type', 'string')
+                            _location = i.get('location', 'form')
+                            _elements = i.get('elements', None)
+                            if _elements:
+                                print(_elements)
+                            field = coreapi.Field(
+                                name=_name,
+                                location=_location,
+                                required=_required,
+                                description=_desc,
+                                # type=_type,
+                                schema=simple2schema(_type, _desc),
+                            )
+                            fields.append(field)
+                else:
+                    _method_desc = a[0]
+                    fields += self.get_serializer_fields(path, method)
         fields += self.get_pagination_fields(path, method)
         fields += self.get_filter_fields(path, method)
 

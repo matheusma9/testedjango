@@ -134,7 +134,7 @@ class Produto(ModelDate):
 
 
 class Carrinho(ModelDate):
-    itens = models.ManyToManyField('website.Produto', through='ItensCarrinho')
+    itens = models.ManyToManyField('website.Produto', through='ItemCarrinho')
     valor_total = models.DecimalField(
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
 
@@ -155,24 +155,24 @@ class Carrinho(ModelDate):
                 raise serializers.ValidationError(
                     'O item ' + str(item.produto) + ' está fora de estoque.')
             if item.quantidade <= item.produto.qtd_estoque:
-                venda_produto = VendaProduto(
+                item_venda = ItemVenda(
                     venda=venda, produto=item.produto, valor=item.valor, quantidade=item.quantidade)
-                venda_produto.save()
-                venda.vendas_produtos_venda.add(venda_produto)
+                item_venda.save()
+                venda.itens.add(item_venda)
             else:
-                venda.vendas_produtos_venda.all().delete()
+                venda.itens.all().delete()
                 venda.delete()
                 raise serializers.ValidationError(
                     'O item ' + str(item.produto) + ' tem uma quantidade em estoque menor do que a desejada')
 
-        for venda_produto in venda.vendas_produtos_venda.all():
-            venda_produto.produto.qtd_estoque -= venda_produto.quantidade
-            venda_produto.produto.save()
+        for item_venda in venda.itens.all():
+            item_venda.produto.qtd_estoque -= item_venda.quantidade
+            item_venda.produto.save()
         venda.save()
         return venda
 
 
-class ItensCarrinho(ModelDate):
+class ItemCarrinho(ModelDate):
     carrinho = models.ForeignKey(
         'website.Carrinho', on_delete=models.CASCADE, related_name='itens_carrinho')
     produto = models.ForeignKey(
@@ -228,7 +228,7 @@ class Cliente(ModelDate):
 
 class Venda(ModelDate):
     produtos = models.ManyToManyField(
-        'website.Produto', through='VendaProduto', related_name='vendas')
+        'website.Produto', through='ItemVenda', related_name='vendas')
     cliente = models.ForeignKey(
         'website.Cliente', on_delete=models.CASCADE, verbose_name='Cliente', related_name='vendas')
     valor_total = models.DecimalField(
@@ -250,11 +250,11 @@ class Venda(ModelDate):
         ordering = ['-update_at']
 
 
-class VendaProduto(ModelDate):
+class ItemVenda(ModelDate):
     venda = models.ForeignKey(
-        'website.Venda', on_delete=models.CASCADE, related_name='vendas_produtos_venda')
+        'website.Venda', on_delete=models.CASCADE, related_name='itens')
     produto = models.ForeignKey(
-        'website.Produto', on_delete=models.CASCADE, related_name='vendas_produtos_produto')
+        'website.Produto', on_delete=models.CASCADE, related_name='itens_vendas')
     valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
     quantidade = models.PositiveIntegerField('Quantidade')
 
@@ -262,8 +262,8 @@ class VendaProduto(ModelDate):
         return str(self.venda.pk) + '-' + self.produto.descricao
 
     class Meta:
-        verbose_name = 'Venda de produto'
-        verbose_name_plural = 'Vendas de produtos'
+        verbose_name = 'Item da venda'
+        verbose_name_plural = 'Itens das vendas'
         ordering = ['-update_at']
 
 

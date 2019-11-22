@@ -18,7 +18,7 @@ class VendaAdmin(admin.ModelAdmin):
 admin.site.register(Cliente)
 admin.site.register(Produto)
 admin.site.register(Venda, VendaAdmin)
-admin.site.register(VendaProduto)
+admin.site.register(ItemVenda)
 admin.site.register(Endereco)
 admin.site.register(Categoria)
 admin.site.register(AvaliacaoProduto)
