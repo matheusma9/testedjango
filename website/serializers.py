@@ -167,8 +167,7 @@ class ItemVendaSerializer(serializers.ModelSerializer):
 
 
 class VendaSerializer(serializers.ModelSerializer):
-    itens = ItemVendaSerializer(
-        source='itens', many=True)
+    itens = ItemVendaSerializer(many=True)
     valor_total = serializers.DecimalField(
         max_digits=10, decimal_places=2, coerce_to_string=False, read_only=True)
 
