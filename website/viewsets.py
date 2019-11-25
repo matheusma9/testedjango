@@ -33,7 +33,7 @@ def list_response(viewset, model_serializer, qs, request):
         serializer = model_serializer(
             page, many=True, context={"request": request})
         return viewset.get_paginated_response(serializer.data)
-    serializer = viewset.get_serializer(qs, many=True)
+    serializer = model_serializer(qs, many=True)
     return Response(serializer.data)
 
 
@@ -393,6 +393,13 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         qs = self.queryset.order_by('-qtd_acessos')[:n]
         serializer = self.serializer_class(qs, many=True)
         return Response(serializer.data)
+
+    @action(methods=['get'], detail=True)
+    def produtos(self, request, pk, *args, **kwargs):
+
+        categoria = self.get_queryset().get(pk=pk)
+        qs = categoria.produtos.all()
+        return list_response(self, ProdutoSerializer, qs, request)
 
     @action(methods=['get'], detail=False)
     def compras(self, request, *args, **kwargs):

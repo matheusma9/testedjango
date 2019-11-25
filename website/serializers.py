@@ -118,6 +118,12 @@ class CategoriaSerializer(serializers.ModelSerializer):
             nome=nome, slug=slug, qtd_acessos=0)
         return categoria
 
+    def update(self, instance, validated_data):
+        instance.nome = validated_data.get('nome', instance.nome)
+        instance.slug = slugify(instance.nome)
+        instance.save()
+        return instance
+
 
 class ProdutoSerializer(serializers.ModelSerializer):
     logo = Base64ImageField(allow_null=True)
