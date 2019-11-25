@@ -108,8 +108,8 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Categoria
-        fields = ['nome', 'slug', 'qtd_acessos']
-        read_only_fields = ['slug', 'qtd_acessos']
+        fields = ['id', 'nome', 'slug', 'qtd_acessos']
+        read_only_fields = ['id', 'slug', 'qtd_acessos']
 
     def create(self, validated_data):
         nome = validated_data.pop('nome')
