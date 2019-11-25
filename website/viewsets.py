@@ -128,7 +128,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
           type: integer
           required: True
           location: form
-        - name: quantidade 
+        - name: quantidade
           desc: Quantidade de itens que serão adicionados.
           type: integer
           required: True
@@ -154,7 +154,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
           type: integer
           required: True
           location: form
-        - name: quantidade 
+        - name: quantidade
           desc: Nova quantidade de itens.
           type: integer
           required: True
@@ -314,9 +314,38 @@ class VendaViewSet(mixins.CreateModelMixin,
     """
     Endpoint relacionado as vendas.
     """
+    schema = CustomSchema()
     serializer_class = VendaSerializer
     queryset = Venda.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def list(self, request, *args, **kwargs):
+        """
+        ---
+        desc:
+         Listar vendas.
+        input:
+        - name: inicio
+          desc: Data inicial.
+          type: string
+          required: false
+          location: query
+        - name: fim
+          desc: Data fim.
+          type: string
+          required: false
+          location: query
+        """
+        inicio = request.GET.get('inicio', None)
+        fim = request.GET.get('fim', None)
+        qs = self.get_queryset()
+        if inicio is not None and fim is not None:
+            qs = qs.filter(created_at__range=(inicio, fim))
+        elif inicio is not None:
+            qs = qs.filter(created_at__gte=inicio)
+        elif fim is not None:
+            qs = qs.filter(created_at__gte=fim)
+        return list_response(self, self.get_serializer, qs, request)
 
 
 class AvaliacaoProdutoViewSet(mixins.CreateModelMixin,

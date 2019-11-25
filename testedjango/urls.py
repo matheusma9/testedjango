@@ -40,7 +40,7 @@ urlpatterns = [
     path('accounts/login/', auth_views.LoginView.as_view()),
     path('admin/', admin.site.urls),
     path('', include(router.urls)),
-    path('login/', LoginView.as_view()),
+    path('login/', LoginView.as_view(), name='login'),
     path('refresh-token/', refresh_jwt_token),
     path('doc/', schema_view)
 ]

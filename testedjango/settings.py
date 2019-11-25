@@ -38,7 +38,7 @@ INTERNAL_IPS = [
     # ...
 ]
 # Application definition
-
+DATE_FORMAT = ['%d/%m/%Y', ]
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'taggit',
     'taggit_serializer',
     'debug_toolbar',
+    'django_filters',
 ]
 
 MIDDLEWARE = [

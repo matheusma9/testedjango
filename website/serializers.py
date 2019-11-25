@@ -173,8 +173,8 @@ class VendaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Venda
-        fields = ['id', 'cliente', 'valor_total', 'itens']
-        read_only_fields = ['id', 'valor_total', 'cliente']
+        fields = ['id', 'cliente', 'valor_total', 'itens', 'created_at']
+        read_only_fields = ['id', 'valor_total', 'cliente', 'created_at']
 
     def criar_itens_vendas(self, itens_vendas_data, venda):
         for item_venda_data in itens_vendas_data:
