@@ -5,26 +5,18 @@ from .serializers import *
 from rest_framework.exceptions import NotAuthenticated, ValidationError
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, BasePermission, IsAdminUser
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from website.recommender import recommender_produtos
 from django.http import Http404
-from rest_framework.filters import BaseFilterBackend
-import coreapi
-import coreschema
-from rest_framework.schemas import AutoSchema
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
+from website.permissions import IsStaffAndOwnerOrReadOnly, IsOwnerOrCreateOnly
 from .filters import *
 from .schema_view import CustomSchema
 from django.db.models import F, Count
 from rest_framework import status
-
-tag_schema = AutoSchema(manual_fields=[coreapi.Field('tags', required=False,
-                                                     location='query',
-                                                     description='Categorias dos produtos(separadas por virgulas).',
-                                                     schema=coreschema.String(),
-                                                     )
-                                       ])
+from django.utils import timezone
+from django.db.models.functions import Coalesce
 
 
 def list_response(viewset, model_serializer, qs, request):
@@ -35,15 +27,6 @@ def list_response(viewset, model_serializer, qs, request):
         return viewset.get_paginated_response(serializer.data)
     serializer = model_serializer(qs, many=True)
     return Response(serializer.data)
-
-
-class IsOwnerdOrCreateOnly(BasePermission):
-    """
-    The request is authenticated as a user, or is a read-only request.
-    """
-
-    def has_object_permission(self, request, view, obj):
-        return request.method == 'POST' or obj.user == request.user
 
 
 class EnderecoViewSet(viewsets.ModelViewSet):
@@ -77,7 +60,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     schema = CustomSchema()
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
-    permission_classes = (IsOwnerdOrCreateOnly, )
+    permission_classes = (IsOwnerOrCreateOnly, )
 
     @action(methods=['get'], detail=True)
     def vendas(self, request, pk):
@@ -344,7 +327,7 @@ class VendaViewSet(mixins.CreateModelMixin,
         elif inicio is not None:
             qs = qs.filter(created_at__gte=inicio)
         elif fim is not None:
-            qs = qs.filter(created_at__gte=fim)
+            qs = qs.filter(created_at__lte=fim)
         return list_response(self, self.get_serializer, qs, request)
 
 
@@ -387,9 +370,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           desc: Número de categorias listadas.
           type: integer
           required: False
-          location: query
+          location: query 
         """
-        n = int(request.GET.get('quantidade', 5))
+        n = int(request.GET.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
         serializer = self.serializer_class(qs, many=True)
         return Response(serializer.data)
@@ -400,6 +383,39 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         categoria = self.get_queryset().get(pk=pk)
         qs = categoria.produtos.all()
         return list_response(self, ProdutoSerializer, qs, request)
+
+    @action(methods=['get'], detail=True)
+    def info(self, request, pk):
+        c = self.get_queryset().get(pk=pk)
+        data = self.serializer_class(c).data
+        expression = models.ExpressionWrapper(F('itens_vendas__valor')*F('itens_vendas__quantidade'), output_field=models.DecimalField(
+            max_digits=10, decimal_places=2, default=Decimal('0.00')))
+        res = c.produtos.annotate(n_vendas=Count('itens_vendas'), receita=expression).aggregate(
+            Sum('receita'), Sum('n_vendas')
+        )
+        data['n_vendas'] = res['n_vendas__sum'] or 0
+        data['receita'] = res['receita__sum'] or 0
+        return Response(data)
+
+    @action(methods=['get'], detail=True, url_path='compras', url_name='compras')
+    def n_vendas(self, request, pk, *args, **kwargs):
+        c = self.get_queryset().get(pk=pk)
+        data = self.serializer_class(c).data
+        n_vendas = c.produtos.annotate(n_vendas=Count('itens_vendas')).aggregate(
+            Sum('n_vendas'))['n_vendas__sum']
+        data['n_vendas'] = n_vendas or 0
+        return Response(data)
+
+    @action(methods=['get'], detail=True,  url_path='receita', url_name='receita')
+    def categoria_receita(self, request, pk, *args, **kwargs):
+        c = self.get_queryset().get(pk=pk)
+        data = self.serializer_class(c).data
+        expression = models.ExpressionWrapper(F('itens_vendas__valor')*F('itens_vendas__quantidade'), output_field=models.DecimalField(
+            max_digits=10, decimal_places=2, default=Decimal('0.00')))
+        receita = c.produtos.annotate(receita=expression).aggregate(
+            Sum('receita'))['receita__sum']
+        data['receita'] = receita or Decimal('0.0')
+        return Response(data)
 
     @action(methods=['get'], detail=False)
     def compras(self, request, *args, **kwargs):
@@ -418,12 +434,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           required: False
           location: query
         """
-        n = int(request.GET.get('quantidade', 5))
-        qs = ItemVenda.objects.all()
-        qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug')).values(
-            'nome', 'slug').exclude(nome=None).order_by()
-        top_categorias = qs_categorias.annotate(
-            n_vendas=Count('pk')).order_by('-n_vendas')
+        n = int(request.GET.get('quantidade', 20))
+        top_categorias = self.get_queryset().annotate(n_vendas=Count('produtos__itens_vendas')
+                                                      ).values('nome', 'slug', 'qtd_acessos', 'n_vendas').order_by('-n_vendas')
         return Response(top_categorias[:n])
 
     @action(methods=['get'], detail=False)
@@ -443,14 +456,15 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           required: False
           location: query
         """
-        n = int(request.GET.get('quantidade', 5))
-        qs = ItemVenda.objects.select_related(
-            'produto').prefetch_related('produto__categorias')
-        expression = models.ExpressionWrapper(F('valor')*F('quantidade'), output_field=models.DecimalField(
+        n = int(request.GET.get('quantidade', 20))
+        expression = models.ExpressionWrapper(F('produtos__itens_vendas__valor')*F('produtos__itens_vendas__quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
-        qs_categorias = qs.annotate(nome=F('produto__categorias__nome'), slug=F('produto__categorias__slug'), valor_total=expression).values(
-            'nome', 'slug').exclude(nome=None).order_by()
+        top_categorias = qs = Categoria.objects.annotate(receita_item=expression).values('slug').annotate(
+            receita=Coalesce(Sum('receita_item'), 0)).values('nome', 'slug', 'qtd_acessos', 'receita')
+        return Response(top_categorias.order_by('-receita')[:n])
 
-        top_categorias = qs_categorias.annotate(
-            receita=Sum('valor_total')).order_by('-receita')
-        return Response(top_categorias[:n])
+
+class OfertaViewSet(viewsets.ModelViewSet):
+    serializer_class = OfertaSerializer
+    queryset = Oferta.objects.filter(validade__gte=timezone.now())
+    permission_classes = (IsStaffAndOwnerOrReadOnly,)

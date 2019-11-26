@@ -285,3 +285,19 @@ class AvaliacaoProduto(ModelDate):
         unique_together = (('cliente', 'produto'),)
         verbose_name = 'Avaliação do Produto'
         verbose_name_plural = 'Avaliações dos Produtos'
+
+
+class Oferta(ModelDate):
+
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='ofertas')
+    banner = models.ImageField(
+        upload_to='website/images/banners', verbose_name='Banner',
+        null=True, blank=True)
+    valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
+    produto = models.ForeignKey(
+        'website.Produto', on_delete=models.CASCADE, related_name='ofertas')
+    validade = models.DateTimeField('Validade')
+
+    class Meta:
+        ordering = ['-validade']

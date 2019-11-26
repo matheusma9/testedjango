@@ -2,11 +2,11 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from website.models import Cliente, Endereco, Carrinho, Categoria, Produto, ItemCarrinho, Venda
+from website.models import Cliente, Endereco, Carrinho, Categoria, Produto, ItemCarrinho, Venda, Oferta
 from django.contrib.auth.models import User
 from decimal import Decimal
 from rest_framework_jwt.settings import api_settings
-
+from decimal import Decimal
 # Create your tests here.
 
 
@@ -176,3 +176,125 @@ class CarrinhoTests(APITestCase):
         v = Venda.objects.get()
         self.assertEqual(v.itens.get().pk, produto.pk)
         self.assertEqual(cliente.carrinho.itens_carrinho.count(), 0)
+
+
+class OfertaTests(APITestCase):
+
+    def setUp(self):
+        Produto.objects.create(descricao='Banana', valor=Decimal(
+            '1.50'), qtd_estoque=20, qtd_limite=9)
+        User.objects.create_user(
+            username='turing', password='senhama9', email='alan_turing@lfc.com')
+        User.objects.create_user(
+            username='admin', password='senhama9', email='admin@admin.com', is_staff=True)
+
+    def test_cria_oferta_error_403(self):
+        self.client.login(username='turing', password='senhama9')
+        url = reverse('oferta-list')
+        produto = Produto.objects.get()
+        data = {
+            'valor': '10.00',
+            'produto': produto.pk,
+            'validade': '2019-11-26T15:40:46Z'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Oferta.objects.count(), 0)
+
+    def test_cria_oferta(self):
+        self.client.login(username='admin', password='senhama9')
+        url = reverse('oferta-list')
+        produto = Produto.objects.get()
+        data = {
+            'valor': '10.00',
+            'produto': produto.pk,
+            'validade': '2019-11-26T15:40:46Z'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Oferta.objects.count(), 1)
+        self.assertEqual(Oferta.objects.get().owner.username, 'admin')
+
+    def test_get_oferta_normal_user(self):
+        self.client.login(username='turing', password='senhama9')
+        url = reverse('oferta-list')
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_get_oferta_staff_user(self):
+        self.client.login(username='admin', password='senhama9')
+        url = reverse('oferta-list')
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_patch_oferta_normal_user(self):
+        self.client.login(username='turing', password='senhama9')
+        owner = User.objects.get(username='admin')
+        produto = Produto.objects.get()
+        oferta = Oferta.objects.create(owner=owner, valor=Decimal(
+            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+        url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
+        response = self.client.patch(
+            url, data={'valor': '11.00'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_oferta_normal_user(self):
+        self.client.login(username='turing', password='senhama9')
+        owner = User.objects.get(username='admin')
+        produto = Produto.objects.get()
+        oferta = Oferta.objects.create(owner=owner, valor=Decimal(
+            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+        url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
+        response = self.client.delete(
+            url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_patch_oferta_staff_user(self):
+        self.client.login(username='admin', password='senhama9')
+        owner = User.objects.get(username='admin')
+        produto = Produto.objects.get()
+        oferta = Oferta.objects.create(owner=owner, valor=Decimal(
+            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+        url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
+        response = self.client.patch(
+            url, data={'valor': '11.00'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Oferta.objects.get().valor, Decimal('11.00'))
+
+    def test_delete_oferta_staff_user(self):
+        self.client.login(username='admin', password='senhama9')
+        owner = User.objects.get(username='admin')
+        produto = Produto.objects.get()
+        oferta = Oferta.objects.create(owner=owner, valor=Decimal(
+            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+        url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
+        response = self.client.delete(
+            url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Oferta.objects.count(), 0)
+
+    def test_patch_oferta_not_owner(self):
+        User.objects.create_user(
+            username='admin2', password='senhama9', email='admin@admin.com', is_staff=True)
+        self.client.login(username='admin2', password='senhama9')
+        owner = User.objects.get(username='admin')
+        produto = Produto.objects.get()
+        oferta = Oferta.objects.create(owner=owner, valor=Decimal(
+            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+        url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
+        response = self.client.patch(
+            url, data={'valor': '11.00'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_oferta_not_owner(self):
+        User.objects.create_user(
+            username='admin2', password='senhama9', email='admin@admin.com', is_staff=True)
+        self.client.login(username='admin2', password='senhama9')
+        owner = User.objects.get(username='admin')
+        produto = Produto.objects.get()
+        oferta = Oferta.objects.create(owner=owner, valor=Decimal(
+            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+        url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
+        response = self.client.patch(
+            url, data={'valor': '11.00'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

@@ -225,3 +225,27 @@ class AvaliacaoProdutoSerializer(serializers.ModelSerializer):
         avaliacao.save()
         recommender_produtos.fit()
         return avaliacao
+
+
+class OfertaSerializer(serializers.ModelSerializer):
+    banner = Base64ImageField(allow_null=True, required=False)
+
+    class Meta:
+        model = Oferta
+        fields = ['id', 'owner', 'banner', 'valor', 'produto', 'validade']
+        read_only_fields = ['id', 'owner']
+        '''
+        extra_kwargs = {'banner': {'required': False,
+                                   'allow_blank': True, 'allow_null': True}}
+        '''
+
+    def create(self, validated_data):
+        banner = validated_data.get('banner', None)
+        try:
+            del validated_data['banner']
+        except KeyError:
+            pass
+        owner = self.context['request'].user
+        oferta = Oferta.objects.create(
+            banner=banner, owner=owner, **validated_data)
+        return oferta
