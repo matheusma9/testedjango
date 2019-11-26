@@ -1,11 +1,13 @@
 from rest_framework import viewsets
 from rest_framework import generics, mixins
+from rest_framework.views import APIView
 from .models import *
 from .serializers import *
 from rest_framework.exceptions import NotAuthenticated, ValidationError
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser
 from website.recommender import recommender_produtos
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
