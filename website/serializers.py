@@ -48,7 +48,7 @@ class EnderecoSerializer(serializers.ModelSerializer):
 class ClienteSerializer(serializers.ModelSerializer):
     user = UserSerializer()
     endereco = EnderecoSerializer()
-    foto = Base64ImageField(allow_null=True)
+    foto = Base64ImageField(allow_null=True, required=False)
     data_nascimento = serializers.DateField(format="%d/%m/%Y")
 
     class Meta:
@@ -56,11 +56,13 @@ class ClienteSerializer(serializers.ModelSerializer):
         fields = ['user', 'foto', 'id', 'nome', 'sobrenome', 'cpf',
                   'rg', 'data_nascimento', 'sexo', 'endereco']
         read_only_fields = ['id']
-        extra_kwargs = {'foto': {'required': False,
-                                 'allow_blank': True, 'allow_null': True}}
 
     def create(self, validated_data):
-        foto = validated_data.pop('foto')
+        foto = validated_data.get('foto', None)
+        try:
+            del validated_data['foto']
+        except KeyError:
+            pass
         usuario_data = validated_data.pop('user')
         if not usuario_data['email']:
             raise serializers.ValidationError('O campo email é obrigatório')
@@ -126,7 +128,7 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
 
 class ProdutoSerializer(serializers.ModelSerializer):
-    logo = Base64ImageField(allow_null=True)
+    logo = Base64ImageField(allow_null=True, required=False)
     categorias = CategoriaSerializer(many=True)
 
     class Meta:
@@ -134,10 +136,13 @@ class ProdutoSerializer(serializers.ModelSerializer):
         fields = ['id', 'descricao', 'valor',
                   'logo', 'qtd_estoque', 'categorias', 'rating']
         read_only_fields = ['id', 'rating']
-        extra_kwargs = {'logo': {'allow_blank': True}}
 
     def create(self, validated_data):
-        logo = validated_data.pop('logo')
+        logo = validated_data.get('logo', None)
+        try:
+            del validated_data['logo']
+        except KeyError:
+            pass
         categorias = validated_data.pop('categorias')
         produto = Produto.objects.create(logo=logo, **validated_data)
 
@@ -228,16 +233,14 @@ class AvaliacaoProdutoSerializer(serializers.ModelSerializer):
 
 
 class OfertaSerializer(serializers.ModelSerializer):
-    banner = Base64ImageField(allow_null=True, required=False)
+    banner = Base64ImageField(
+        allow_null=True, required=False)
+    validade = serializers.DateTimeField(format="%d/%m/%YT%H:%M")
 
     class Meta:
         model = Oferta
         fields = ['id', 'owner', 'banner', 'valor', 'produto', 'validade']
         read_only_fields = ['id', 'owner']
-        '''
-        extra_kwargs = {'banner': {'required': False,
-                                   'allow_blank': True, 'allow_null': True}}
-        '''
 
     def create(self, validated_data):
         banner = validated_data.get('banner', None)

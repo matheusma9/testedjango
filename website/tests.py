@@ -195,7 +195,7 @@ class OfertaTests(APITestCase):
         data = {
             'valor': '10.00',
             'produto': produto.pk,
-            'validade': '2019-11-26T15:40:46Z'
+            'validade': '2029-11-26T15:40'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -208,7 +208,7 @@ class OfertaTests(APITestCase):
         data = {
             'valor': '10.00',
             'produto': produto.pk,
-            'validade': '2019-11-26T15:40:46Z'
+            'validade': '2029-11-26T15:40'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -232,7 +232,7 @@ class OfertaTests(APITestCase):
         owner = User.objects.get(username='admin')
         produto = Produto.objects.get()
         oferta = Oferta.objects.create(owner=owner, valor=Decimal(
-            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+            "10.00"), validade='2035-11-26T15:40', produto=produto)
         url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
         response = self.client.patch(
             url, data={'valor': '11.00'}, format='json')
@@ -243,7 +243,7 @@ class OfertaTests(APITestCase):
         owner = User.objects.get(username='admin')
         produto = Produto.objects.get()
         oferta = Oferta.objects.create(owner=owner, valor=Decimal(
-            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+            "10.00"), validade='2035-11-26T15:40', produto=produto)
         url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
         response = self.client.delete(
             url, format='json')
@@ -254,7 +254,7 @@ class OfertaTests(APITestCase):
         owner = User.objects.get(username='admin')
         produto = Produto.objects.get()
         oferta = Oferta.objects.create(owner=owner, valor=Decimal(
-            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+            "10.00"), validade='2035-11-26T15:40', produto=produto)
         url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
         response = self.client.patch(
             url, data={'valor': '11.00'}, format='json')
@@ -266,7 +266,7 @@ class OfertaTests(APITestCase):
         owner = User.objects.get(username='admin')
         produto = Produto.objects.get()
         oferta = Oferta.objects.create(owner=owner, valor=Decimal(
-            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+            "10.00"), validade='2035-11-26T15:40', produto=produto)
         url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
         response = self.client.delete(
             url, format='json')
@@ -280,7 +280,7 @@ class OfertaTests(APITestCase):
         owner = User.objects.get(username='admin')
         produto = Produto.objects.get()
         oferta = Oferta.objects.create(owner=owner, valor=Decimal(
-            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+            "10.00"), validade='2035-11-26T15:40', produto=produto)
         url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
         response = self.client.patch(
             url, data={'valor': '11.00'}, format='json')
@@ -293,8 +293,8 @@ class OfertaTests(APITestCase):
         owner = User.objects.get(username='admin')
         produto = Produto.objects.get()
         oferta = Oferta.objects.create(owner=owner, valor=Decimal(
-            "10.00"), validade='2019-11-26T15:40:46Z', produto=produto)
+            "10.00"), validade='2035-11-26T15:40', produto=produto)
         url = reverse('oferta-detail', kwargs={'pk': oferta.pk})
-        response = self.client.patch(
+        response = self.client.delete(
             url, data={'valor': '11.00'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

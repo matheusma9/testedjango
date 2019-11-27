@@ -70,7 +70,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
         Obter vendas relacionadas a um determinado cliente.
         """
         try:
-            cliente = Cliente.objects.get(pk=pk)
+            cliente = self.get_object()
             return list_response(self, VendaSerializer, cliente.vendas.all(), request)
         except models.ObjectDoesNotExist:
             raise Http404
@@ -92,7 +92,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     @action(methods=['get'], detail=True)
     def avaliacoes(self, request, pk):
         try:
-            cliente = Cliente.objects.get(pk=pk)
+            cliente = self.get_object()
             return list_response(self, AvaliacaoProdutoSerializer, cliente.avaliacoes_produto.all(), request)
         except models.ObjectDoesNotExist:
             raise Http404
@@ -249,10 +249,74 @@ class ClienteViewSet(viewsets.ModelViewSet):
         except models.ObjectDoesNotExist:
             raise Http404
 
+    @action(methods=['post'], detail=False)
+    def oferta(self, request):
+        """
+        ---
+        method_path:
+         /clientes/oferta/
+        method_action:
+         POST
+        desc:
+         Adicionar oferta de produto no carrinho.
+        input:
+        - name: oferta
+          desc: Id da oferta.
+          type: integer
+          required: True
+          location: form
+        - name: quantidade
+          desc: Quantidade de itens que serão adicionados.
+          type: integer
+          required: True
+          location: form
+        """
+        try:
+            if request.user.is_authenticated:
+                error = False
+                messages = []
+                cliente = self.get_queryset().get(user=request.user)
+                print(cliente)
+                oferta = Oferta.objects.filter(validade__gte=timezone.now()).get(
+                    pk=request.data['oferta'])
+                print(oferta)
+                created = False
+                if not cliente.carrinho:
+                    created = True
+                    cliente.carrinho = Carrinho.objects.create()
+                    cliente.save()
+                produto = oferta.produto
+                quantidade = request.data['quantidade']
+                if created:
+                    quantidade, error, messages = produto.validar_qtd(
+                        quantidade, error, messages)
+                    if quantidade:
+                        cliente.carrinho.itens_carrinho.create(produto=produto, carrinho=cliente.carrinho,
+                                                               valor=oferta.valor, quantidade=quantidade)
+                        cliente.carrinho.save()
+                else:
+                    item, c = cliente.carrinho.itens_carrinho.get_or_create(
+                        produto=produto, carrinho=cliente.carrinho)
+                    item.valor = oferta.valor
+                    item.quantidade, error, messages = produto.validar_qtd(
+                        ((item.quantidade or 0) + quantidade), error, messages)
+                    if item.quantidade:
+                        item.save()
+                    else:
+                        item.delete()
+                cliente.carrinho.atualizar_valor()
+                serializer = CarrinhoSerializer(cliente.carrinho)
+                data = serializer.data
+                data['messages'] = messages
+                data['error'] = error
+                return Response(data)
+            else:
+                raise NotAuthenticated()
+        except models.ObjectDoesNotExist:
+            raise Http404
+
 
 class ProdutoViewSet(mixins.CreateModelMixin,
-                     mixins.ListModelMixin,
-                     mixins.RetrieveModelMixin,
                      mixins.UpdateModelMixin,
                      viewsets.GenericViewSet):
 
@@ -290,9 +354,14 @@ class ProdutoViewSet(mixins.CreateModelMixin,
             queryset = queryset.filter(categorias__in=categorias).distinct()
         return list_response(self, self.get_serializer, queryset, request)
 
+    def retrieve(self, request, *args, **kwargs):
+        produto = self.get_object()
+        produto.categorias.update(qtd_acessos=F('qtd_acessos') + 1)
+        serializer = self.get_serializer(produto)
+        return Response(serializer.data)
+
 
 class VendaViewSet(mixins.CreateModelMixin,
-                   mixins.ListModelMixin,
                    mixins.RetrieveModelMixin,
                    viewsets.GenericViewSet):
 
@@ -345,11 +414,7 @@ class AvaliacaoProdutoViewSet(mixins.CreateModelMixin,
 
 class CategoriaViewSet(viewsets.ModelViewSet):
     """
-
-
     Endpoint relacionado as categorias.
-
-
     """
     serializer_class = CategoriaSerializer
     queryset = Categoria.objects.all()
@@ -382,13 +447,15 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
 
-        categoria = self.get_queryset().get(pk=pk)
+        categoria = self.get_object()
+        categoria.qtd_acessos += 1
+        categoria.save()
         qs = categoria.produtos.all()
         return list_response(self, ProdutoSerializer, qs, request)
 
     @action(methods=['get'], detail=True)
     def info(self, request, pk):
-        c = self.get_queryset().get(pk=pk)
+        c = self.get_object()
         data = self.serializer_class(c).data
         expression = models.ExpressionWrapper(F('itens_vendas__valor')*F('itens_vendas__quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
@@ -401,7 +468,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
     @action(methods=['get'], detail=True, url_path='compras', url_name='compras')
     def n_vendas(self, request, pk, *args, **kwargs):
-        c = self.get_queryset().get(pk=pk)
+        c = self.get_object()
         data = self.serializer_class(c).data
         n_vendas = c.produtos.annotate(n_vendas=Count('itens_vendas')).aggregate(
             Sum('n_vendas'))['n_vendas__sum']
@@ -410,7 +477,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
     @action(methods=['get'], detail=True,  url_path='receita', url_name='receita')
     def categoria_receita(self, request, pk, *args, **kwargs):
-        c = self.get_queryset().get(pk=pk)
+        c = self.get_object()
         data = self.serializer_class(c).data
         expression = models.ExpressionWrapper(F('itens_vendas__valor')*F('itens_vendas__quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
@@ -470,3 +537,9 @@ class OfertaViewSet(viewsets.ModelViewSet):
     serializer_class = OfertaSerializer
     queryset = Oferta.objects.filter(validade__gte=timezone.now())
     permission_classes = (IsStaffAndOwnerOrReadOnly,)
+
+    def retrieve(self, request, *args, **kwargs):
+        oferta = self.get_object()
+        oferta.produto.categorias.update(qtd_acessos=F('qtd_acessos') + 1)
+        serializer = self.get_serializer(oferta)
+        return Response(serializer.data)

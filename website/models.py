@@ -139,7 +139,7 @@ class Carrinho(ModelDate):
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
 
     def atualizar_valor(self):
-        expression = Sum(F('produto__valor') * F('quantidade'),
+        expression = Sum(F('valor') * F('quantidade'),
                          output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
         self.valor_total = self.itens_carrinho.aggregate(
             valor_total=expression)['valor_total'] or Decimal('0.00')
@@ -298,6 +298,9 @@ class Oferta(ModelDate):
     produto = models.ForeignKey(
         'website.Produto', on_delete=models.CASCADE, related_name='ofertas')
     validade = models.DateTimeField('Validade')
+
+    def __str__(self):
+        return str(self.produto) + ' - ' + str(self.valor) + ' - ' + str(self.validade)
 
     class Meta:
         ordering = ['-validade']

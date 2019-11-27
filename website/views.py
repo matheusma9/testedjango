@@ -8,7 +8,6 @@ from rest_framework import status
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAdminUser
-from django.db import IntegrityError
 from rest_framework import status
 # Create your views here.
 jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
@@ -29,7 +28,6 @@ class StaffView(APIView):
         """
         Return a list of all users.
         """
-        print(request.data)
         messages = []
         error = False
         username = request.data.get('username', None)
@@ -58,7 +56,7 @@ class StaffView(APIView):
             return Response({'messsages': messages}, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.create_user(
-            username=request.data['username'], password=request.data['password'], email=request.data['email'])
+            username=request.data['username'], password=request.data['password'], email=request.data['email'], is_staff=True)
 
         return Response({'messages': ['Usuário cadastrado com sucesso']})
 
@@ -107,4 +105,52 @@ class LoginView(ObtainJSONWebToken):
                          'message': 'Successfully logged in',
                          'token': token,
                          'cliente': cliente},
+                        status=status.HTTP_200_OK)
+
+
+class LoginStaffView(ObtainJSONWebToken):
+    def post(self, request, *args, **kwargs):
+        # by default attempts username / passsword combination
+        response = super(LoginStaffView, self).post(request, *args, **kwargs)
+        # token = response.data['token']  # don't use this to prevent errors
+        # below will return null, but not an error, if not found :)
+        res = response.data
+        token = res.get('token')
+
+        # token ok, get user
+        if token:
+            # aleady json - don't serialize
+            user_data = jwt_decode_handler(token)
+            user = User.objects.get(
+                username=user_data['username'], is_staff=True)
+        else:  # if none, try auth by email
+            req = request.data  # try and find email in request
+            password = req.get('password')
+            username = req.get('username')
+            if username is None and password is None:
+                return Response({'success': False,
+                                 'message': 'Missing or incorrect credentials',
+                                 'data': req},
+                                status=status.HTTP_400_BAD_REQUEST)
+            try:
+                user = User.objects.get(username=username, is_staff=True)
+            except:
+                return Response({'success': False,
+                                 'message': 'Staff not found',
+                                 'data': req},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            if not user.check_password(password):
+                return Response({'success': False,
+                                 'message': 'Incorrect password',
+                                 'data': req},
+                                status=status.HTTP_403_FORBIDDEN)
+
+            payload = jwt_payload_handler(user)
+            token = jwt_encode_handler(payload)
+
+        return Response({'success': True,
+                         'message': 'Successfully logged in',
+                         'token': token,
+                         'staff': user.pk},
                         status=status.HTTP_200_OK)

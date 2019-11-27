@@ -20,7 +20,7 @@ from website.viewsets import *
 from rest_framework_jwt.views import obtain_jwt_token, refresh_jwt_token
 from django.views.generic import TemplateView
 #from rest_framework_swagger.views import get_swagger_view
-from website.views import LoginView, StaffView
+from website.views import LoginView, StaffView, LoginStaffView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
@@ -45,7 +45,8 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('refresh-token/', refresh_jwt_token),
     path('doc/', schema_view),
-    path('staff/', StaffView.as_view())
+    path('staff/', StaffView.as_view()),
+    path('login-staff/', LoginStaffView.as_view(), name='login-staff')
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL,
