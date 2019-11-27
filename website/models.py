@@ -215,6 +215,7 @@ class Cliente(ModelDate):
     def idade(self):
         now = timezone.now()
         idade = (timezone.now().date() - self.data_nascimento).days//365
+        print('a')
         return idade
 
     def __str__(self):
