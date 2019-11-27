@@ -17,8 +17,10 @@ class AccountTests(APITestCase):
             bairro='Leblon', rua='Rua dos Bobos', numero_casa='0', cep='12345-678', cidade='Rio de Janeiro', uf='RJ')
         user = User.objects.create_user(
             username='turing', password='senhama9', email='alan_turing@lfc.com')
-        Cliente.objects.create(user=user, nome='Alan', sobrenome='Turing', cpf=454543, rg=777444, data_nascimento='1912-06-23',
-                               sexo='M', endereco=endereco)
+        cliente = Cliente.objects.create(user=user, nome='Alan', sobrenome='Turing', cpf=454543, rg=777444, data_nascimento='1912-06-23',
+                                         sexo='M')
+        cliente.enderecos.add(endereco)
+        cliente.save()
 
     def test_create_account(self):
         """
@@ -44,9 +46,10 @@ class AccountTests(APITestCase):
                 'data_nascimento': '23/06/1912',
                 'sexo': 'M',
                 'user': user,
-                'endereco': endereco,
+                'enderecos': [],
                 'foto': None}
         response = self.client.post(url, data, format='json')
+        print(response.data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Cliente.objects.count(), 2)
         self.assertEqual(Cliente.objects.get(nome='Teste').nome, 'Teste')
@@ -69,8 +72,10 @@ class CarrinhoTests(APITestCase):
             bairro='Leblon', rua='Rua dos Bobos', numero_casa='0', cep='12345-678', cidade='Rio de Janeiro', uf='RJ')
         user = User.objects.create_user(
             username='turing', password='senhama9', email='alan_turing@lfc.com')
-        Cliente.objects.create(user=user, nome='Alan', sobrenome='Turing', cpf=454543, rg=777444, data_nascimento='1912-06-23',
-                               sexo='M', endereco=endereco)
+        cliente = Cliente.objects.create(user=user, nome='Alan', sobrenome='Turing', cpf=454543, rg=777444, data_nascimento='1912-06-23',
+                                         sexo='M')
+        cliente.enderecos.add(endereco)
+        cliente.save()
         c = Categoria.objects.create(nome='Fruta', slug='fruta')
         p = Produto.objects.create(descricao='Banana', valor=Decimal(
             '1.50'), qtd_estoque=20, qtd_limite=9)
@@ -168,8 +173,9 @@ class CarrinhoTests(APITestCase):
     def test_comprar(self):
         produto = self.get_produto()
         cliente = self.get_cliente()
+        endereco = cliente.enderecos.first()
         url = reverse('cliente-compra')
-        data = {}
+        data = {'endereco': endereco.pk}
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Venda.objects.count(), 1)

@@ -47,14 +47,14 @@ class EnderecoSerializer(serializers.ModelSerializer):
 
 class ClienteSerializer(serializers.ModelSerializer):
     user = UserSerializer()
-    endereco = EnderecoSerializer()
+    enderecos = EnderecoSerializer(many=True)
     foto = Base64ImageField(allow_null=True, required=False)
     data_nascimento = serializers.DateField(format="%d/%m/%Y")
 
     class Meta:
         model = Cliente
         fields = ['user', 'foto', 'id', 'nome', 'sobrenome', 'cpf',
-                  'rg', 'data_nascimento', 'sexo', 'endereco']
+                  'rg', 'data_nascimento', 'sexo', 'enderecos']
         read_only_fields = ['id']
 
     def create(self, validated_data):
@@ -66,11 +66,16 @@ class ClienteSerializer(serializers.ModelSerializer):
         usuario_data = validated_data.pop('user')
         if not usuario_data['email']:
             raise serializers.ValidationError('O campo email é obrigatório')
-        endereco_data = validated_data.pop('endereco')
+        enderecos_data = validated_data.pop('enderecos')
+
         user = User.objects.create_user(**usuario_data)
-        endereco, _ = Endereco.objects.get_or_create(**endereco_data)
+
         cliente = Cliente.objects.create(
-            user=user, endereco=endereco, foto=foto, **validated_data)
+            user=user, foto=foto, **validated_data)
+        for endereco_data in enderecos_data:
+            endereco, _ = Endereco.objects.get_or_create(**endereco_data)
+            cliente.enderecos.add(endereco)
+        cliente.save()
         return cliente
 
     def update_endereco(self, instance, endereco):
@@ -101,7 +106,9 @@ class ClienteSerializer(serializers.ModelSerializer):
         instance.data_nascimento = validated_data.get(
             'data_nascimento', instance.data_nascimento)
         instance.sexo = validated_data.get('sexo', instance.sexo)
-        self.update_endereco(instance, validated_data.get('endereco', None))
+        enderecos_data = validated_data.get('enderecos', [])
+        for endereco_data in enderecos_data:
+            self.update_endereco(instance, endereco_data)
         instance.save()
         return instance
 
@@ -184,7 +191,8 @@ class VendaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Venda
-        fields = ['id', 'cliente', 'valor_total', 'itens', 'created_at']
+        fields = ['id', 'cliente', 'valor_total',
+                  'itens', 'created_at', 'endereco_entrega']
         read_only_fields = ['id', 'valor_total', 'cliente', 'created_at']
 
     def criar_itens_vendas(self, itens_vendas_data, venda):

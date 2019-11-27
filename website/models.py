@@ -203,8 +203,8 @@ class Cliente(ModelDate):
     data_nascimento = models.DateField(
         'Data de Nascimento', blank=True, null=True)
     sexo = models.CharField('Sexo', max_length=1, choices=SEXO, default='M')
-    endereco = models.ForeignKey(
-        Endereco, on_delete=models.CASCADE, related_name='clientes')
+    enderecos = models.ManyToManyField(
+        Endereco, related_name='clientes')
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name='cliente')
     carrinho = models.OneToOneField(
@@ -233,6 +233,8 @@ class Venda(ModelDate):
         'website.Cliente', on_delete=models.CASCADE, verbose_name='Cliente', related_name='vendas')
     valor_total = models.DecimalField(
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
+    endereco_entrega = models.ForeignKey(
+        'website.Endereco', on_delete=models.CASCADE, related_name='vendas', null=True, blank=True)
 
     def atualizar_valor(self):
         expression = Sum(F('valor') * F('quantidade'),

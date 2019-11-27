@@ -64,6 +64,30 @@ class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     permission_classes = (IsOwnerOrCreateOnly, )
 
+    @action(methods=['get', 'post'], detail=False)
+    def enderecos(self, request):
+        try:
+            if request.user.is_authenticated:
+                cliente = Cliente.objects.get(user=request.user)
+                if request.method == "GET":
+                    enderecos = cliente.enderecos.all()
+                    return list_response(self, EnderecoSerializer, enderecos, request)
+                if request.method == "POST":
+                    endereco_pk = request.data.get('endereco', None)
+                    if endereco_pk:
+                        endereco = Endereco.objects.get(pk=endereco_pk)
+                        cliente.enderecos.add(endereco)
+                        cliente.save()
+                        serializer = self.serializer_class(cliente)
+                        return Response(serializer.data)
+                    else:
+                        data = {'detail': 'O campo endereço é obrigatório'}
+                        return Response(data, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                raise NotAuthenticated
+        except models.ObjectDoesNotExist:
+            raise Http404
+
     @action(methods=['get'], detail=True)
     def vendas(self, request, pk):
         """
@@ -232,20 +256,37 @@ class ClienteViewSet(viewsets.ModelViewSet):
           type: array
           required: False
           location: form
+        - name: endereco
+          desc: Id do Endereco de entrega
+          type: int
+          required: True
+          location: form
         """
         try:
-            carrinho = Carrinho.objects.get(cliente__user=request.user)
-            itens = request.data.get('itens', [])
-            for item in itens:
-                carrinho.itens_carrinho.filter(
-                    produto__pk=item['produto']).update(quantidade=item['quantidade'])
-                carrinho.save()
-            carrinho.atualizar_valor()
-            venda = carrinho.to_venda()
-            carrinho.itens_carrinho.all().delete()
-            carrinho.atualizar_valor()
-            serializer = VendaSerializer(venda)
-            return Response(serializer.data)
+            if request.user.is_authenticated:
+                cliente = Cliente.objects.get(user=request.user)
+                carrinho = Carrinho.objects.get(cliente=cliente)
+                endereco_pk = request.data.get('endereco', None)
+                if endereco_pk:
+                    endereco = cliente.enderecos.get(pk=endereco_pk)
+                    itens = request.data.get('itens', [])
+                    for item in itens:
+                        carrinho.itens_carrinho.filter(
+                            produto__pk=item['produto']).update(quantidade=item['quantidade'])
+                        carrinho.save()
+                    carrinho.atualizar_valor()
+                    venda = carrinho.to_venda()
+                    venda.endereco_entrega = endereco
+                    venda.save()
+                    carrinho.itens_carrinho.all().delete()
+                    carrinho.atualizar_valor()
+                    serializer = VendaSerializer(venda)
+                    return Response(serializer.data)
+                else:
+                    data = {'detail': 'O campo endereço é obrigatório'}
+                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                raise NotAuthenticated
         except models.ObjectDoesNotExist:
             raise Http404
 
