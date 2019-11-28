@@ -141,7 +141,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor',
-                  'logo', 'qtd_estoque', 'categorias', 'rating']
+                  'logo', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating']
         read_only_fields = ['id', 'rating']
 
     def create(self, validated_data):
@@ -166,7 +166,10 @@ class ProdutoSerializer(serializers.ModelSerializer):
         self.instance.logo = validated_data.get('logo', self.instance.logo)
         self.instance.qtd_estoque = validated_data.get(
             'qtd_estoque', self.instance.qtd_estoque)
+        self.instance.qtd_estoque = validated_data.get(
+            'qtd_limite', self.instance.qtd_limite)
         categorias = validated_data.get('categorias', None)
+
         if categorias:
             for categoria in categorias:
                 c, _ = Categoria.objects.get_or_create(**categoria)
@@ -241,22 +244,23 @@ class AvaliacaoProdutoSerializer(serializers.ModelSerializer):
 
 
 class OfertaSerializer(serializers.ModelSerializer):
-    banner = Base64ImageField(
+    foto = Base64ImageField(
         allow_null=True, required=False)
     validade = serializers.DateTimeField(format="%d/%m/%YT%H:%M")
 
     class Meta:
         model = Oferta
-        fields = ['id', 'owner', 'banner', 'valor', 'produto', 'validade']
+        fields = ['id', 'owner', 'foto', 'valor',
+                  'produto', 'validade', 'is_banner']
         read_only_fields = ['id', 'owner']
 
     def create(self, validated_data):
-        banner = validated_data.get('banner', None)
+        foto = validated_data.get('foto', None)
         try:
-            del validated_data['banner']
+            del validated_data['foto']
         except KeyError:
             pass
         owner = self.context['request'].user
         oferta = Oferta.objects.create(
-            banner=banner, owner=owner, **validated_data)
+            foto=foto, owner=owner, **validated_data)
         return oferta

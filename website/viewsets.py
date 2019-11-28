@@ -372,6 +372,8 @@ class ProdutoViewSet(mixins.CreateModelMixin,
     serializer_class = ProdutoSerializer
     queryset = Produto.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
+    search_fields = ['descricao']
+    filter_backends = (filters.SearchFilter,)
 
     def list(self, request, *args, **kwargs):
         """
@@ -578,6 +580,8 @@ class OfertaViewSet(viewsets.ModelViewSet):
     serializer_class = OfertaSerializer
     queryset = Oferta.objects.filter(validade__gte=timezone.now())
     permission_classes = (IsStaffAndOwnerOrReadOnly,)
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ('is_banner',)
 
     def retrieve(self, request, *args, **kwargs):
         oferta = self.get_object()
