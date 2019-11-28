@@ -462,8 +462,12 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     serializer_class = CategoriaSerializer
     queryset = Categoria.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-    pagination_class = None
     schema = CustomSchema()
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(methods=['get'], detail=False)
     def acessos(self, request, *args, **kwargs):
