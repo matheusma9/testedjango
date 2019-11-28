@@ -95,6 +95,15 @@ class Produto(ModelDate):
         'website.Cliente', through='AvaliacaoProduto')
 
     @property
+    def valor_atual(self):
+        queryset = Oferta.objects.filter(
+            validade__gte=timezone.now(), produto=self)
+        if queryset.exists():
+            return queryset[0].valor
+        else:
+            return self.valor
+
+    @property
     def rating(self):
         return self.avaliacoes_produto.aggregate(rating=Avg('rating'))['rating'] or Decimal('0.00')
 

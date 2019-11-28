@@ -141,8 +141,8 @@ class ProdutoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor',
-                  'logo', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating']
-        read_only_fields = ['id', 'rating']
+                  'logo', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating', 'valor_atual']
+        read_only_fields = ['id', 'rating', 'valor_atual']
 
     def create(self, validated_data):
         logo = validated_data.get('logo', None)
@@ -262,6 +262,6 @@ class OfertaSerializer(serializers.ModelSerializer):
             pass
         owner = self.context['request'].user
 
-        oferta, _ = Oferta.objects.get_or_create(
+        oferta = Oferta.objects.create(
             foto=foto, owner=owner, **validated_data)
         return oferta
