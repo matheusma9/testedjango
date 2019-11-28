@@ -166,7 +166,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
         self.instance.logo = validated_data.get('logo', self.instance.logo)
         self.instance.qtd_estoque = validated_data.get(
             'qtd_estoque', self.instance.qtd_estoque)
-        self.instance.qtd_estoque = validated_data.get(
+        self.instance.qtd_limite = validated_data.get(
             'qtd_limite', self.instance.qtd_limite)
         categorias = validated_data.get('categorias', None)
 
