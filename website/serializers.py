@@ -261,6 +261,7 @@ class OfertaSerializer(serializers.ModelSerializer):
         except KeyError:
             pass
         owner = self.context['request'].user
-        oferta = Oferta.objects.create(
+
+        oferta, _ = Oferta.objects.get_or_create(
             foto=foto, owner=owner, **validated_data)
         return oferta

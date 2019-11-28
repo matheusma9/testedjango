@@ -462,7 +462,6 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     serializer_class = CategoriaSerializer
     queryset = Categoria.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-    pagination_class = None
     schema = CustomSchema()
 
     @action(methods=['get'], detail=False)
@@ -582,6 +581,14 @@ class OfertaViewSet(viewsets.ModelViewSet):
     permission_classes = (IsStaffAndOwnerOrReadOnly,)
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ('is_banner',)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        Oferta.objects.filter(produto__pk=request.data['produto']).delete()
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def retrieve(self, request, *args, **kwargs):
         oferta = self.get_object()

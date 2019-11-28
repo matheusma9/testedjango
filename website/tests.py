@@ -240,6 +240,26 @@ class OfertaTests(APITestCase):
         self.assertEqual(Oferta.objects.count(), 1)
         self.assertEqual(Oferta.objects.get().owner.username, 'admin')
 
+    def test_cria_2_ofertas_do_mesmo_produto(self):
+        self.client.login(username='admin', password='senhama9')
+        url = reverse('oferta-list')
+        produto = Produto.objects.get()
+        Oferta.objects.create(owner=User.objects.get(username='admin'), valor=Decimal(
+            '10.00'), produto=produto, validade='2029-11-26T15:40', is_banner=True)
+        produto = Produto.objects.get()
+        data = {
+            'valor': 11.00,
+            'produto': produto.pk,
+            'validade': '2034-11-26T15:40',
+            'is_banner': True
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Oferta.objects.count(), 1)
+        oferta = Oferta.objects.get()
+        self.assertEqual(oferta.owner.username, 'admin')
+        self.assertEqual(oferta.valor, Decimal('11.00'))
+
     def test_get_oferta_normal_user(self):
         self.client.login(username='turing', password='senhama9')
         url = reverse('oferta-list')
