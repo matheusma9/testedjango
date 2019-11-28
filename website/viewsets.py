@@ -462,6 +462,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     serializer_class = CategoriaSerializer
     queryset = Categoria.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
+    pagination_class = None
     schema = CustomSchema()
 
     @action(methods=['get'], detail=False)
