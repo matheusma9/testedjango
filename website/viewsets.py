@@ -494,12 +494,17 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
-
+        search = request.GET.get('search', None)
         categoria = self.get_object()
         categoria.qtd_acessos += 1
         categoria.save()
-        qs = categoria.produtos.all()
-        return list_response(self, ProdutoSerializer, qs, request)
+        if search:
+            qs = categoria.produtos.filter(
+                descricao__icontains=search)
+        else:
+            qs = categoria.produtos.all()
+        serializer = ProdutoSerializer(qs, many=True)
+        return Response(serializer.data)
 
     @action(methods=['get'], detail=True)
     def info(self, request, pk):
