@@ -488,8 +488,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         """
         n = int(request.GET.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
-        serializer = self.serializer_class(qs, many=True)
-        return Response(serializer.data)
+        return list_response(self, self.serializer_class, qs, request)
 
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
