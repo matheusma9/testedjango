@@ -489,11 +489,27 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         """
         n = int(request.GET.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
-        serializer = self.get_serializer_class(qs, many=True)
+        serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
+        """
+        ---
+        method_path:
+         /categorias/id/produtos/
+        method_action:
+         GET
+        desc:
+         Categorias mais acessadas.
+        input:
+        - name: search
+          desc: Número de categorias listadas.
+          type: integer
+          required: False
+          location: query 
+
+        """
         search = request.GET.get('search', None)
         categoria = self.get_object()
         categoria.qtd_acessos += 1

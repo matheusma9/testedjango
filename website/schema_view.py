@@ -22,6 +22,7 @@ class CustomSchema(AutoSchema):
 
         endpoint_desc = self.view.__doc__
 
+        # print(path)
         method_name = getattr(view, 'action', method.lower())
 
         method_docstring = getattr(view, method_name, None).__doc__
@@ -51,8 +52,8 @@ class CustomSchema(AutoSchema):
                     method_action = yaml_doc.get('method_action', '')
                     method_path = yaml_doc.get('method_path', '')
                     if (method_action == '' or method == method_action) and (method_path == '' or path == method_path):
-
-                        fields = []
+                        if not method == 'GET':
+                            fields = []
                         _desc = yaml_doc.get('desc', '')
 
                         _method_desc = _desc
