@@ -485,10 +485,12 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           type: integer
           required: False
           location: query 
+
         """
         n = int(request.GET.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
-        return list_response(self, self.serializer_class, qs, request)
+        serializer = self.get_serializer_class(qs, many=True)
+        return Response(serializer.data)
 
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
@@ -548,6 +550,16 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           type: integer
           required: False
           location: query
+        - name: page
+          desc: Número da página.
+          type: integer
+          required: False
+          location: query 
+        - name: limit
+          desc: Quantidade de itens por páginas.
+          type: integer
+          required: False
+          location: query 
         """
         n = int(request.GET.get('quantidade', 20))
         top_categorias = self.get_queryset().annotate(n_vendas=Count('produtos__itens_vendas')
@@ -570,6 +582,16 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           type: integer
           required: False
           location: query
+        - name: page
+          desc: Número da página.
+          type: integer
+          required: False
+          location: query 
+        - name: limit
+          desc: Quantidade de itens por páginas.
+          type: integer
+          required: False
+          location: query 
         """
         n = int(request.GET.get('quantidade', 20))
         expression = models.ExpressionWrapper(F('produtos__itens_vendas__valor')*F('produtos__itens_vendas__quantidade'), output_field=models.DecimalField(

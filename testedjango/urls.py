@@ -48,6 +48,8 @@ urlpatterns = [
     path('staff/', StaffView.as_view()),
     path('login-staff/', LoginStaffView.as_view(), name='login-staff')
 ]
+urlpatterns += static(settings.MEDIA_URL,
+                      document_root=settings.MEDIA_ROOT)
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL,
                           document_root=settings.MEDIA_ROOT)
