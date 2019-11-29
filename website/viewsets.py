@@ -500,11 +500,11 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         categoria.save()
         if search:
             qs = categoria.produtos.filter(
-                descricao__icontains=search)
+                descricao__unaccent__icontains=search)
         else:
             qs = categoria.produtos.all()
         serializer = ProdutoSerializer(qs, many=True)
-        return Response(serializer.data)
+        return list_response(self, ProdutoSerializer, qs, request)
 
     @action(methods=['get'], detail=True)
     def info(self, request, pk):
