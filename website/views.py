@@ -73,7 +73,7 @@ class LoginView(ObtainJSONWebToken):
         # token ok, get user
         if token:
             user = jwt_decode_handler(token)  # aleady json - don't serialize
-            cliente = Cliente.objects.get(user__username=user['username']).pk
+            cliente = Cliente.objects.get(user__username=user['username'])
         else:  # if none, try auth by email
             req = request.data  # try and find email in request
             password = req.get('password')
@@ -99,12 +99,13 @@ class LoginView(ObtainJSONWebToken):
 
             payload = jwt_payload_handler(user)
             token = jwt_encode_handler(payload)
-            cliente = Cliente.objects.get(user__username=user['username']).pk
+            cliente = Cliente.objects.get(user__username=user['username'])
 
         return Response({'success': True,
                          'message': 'Successfully logged in',
                          'token': token,
-                         'cliente': cliente},
+                         'cliente': cliente.pk,
+                         'is_staff': cliente.user.is_staff},
                         status=status.HTTP_200_OK)
 
 

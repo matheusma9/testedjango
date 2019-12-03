@@ -52,7 +52,8 @@ class CustomSchema(AutoSchema):
                     method_action = yaml_doc.get('method_action', '')
                     method_path = yaml_doc.get('method_path', '')
                     if (method_action == '' or method == method_action) and (method_path == '' or path == method_path):
-                        if not method == 'GET':
+
+                        if not method_action == 'GET':
                             fields = []
                         _desc = yaml_doc.get('desc', '')
 

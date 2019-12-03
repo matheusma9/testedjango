@@ -123,8 +123,8 @@ class CategoriaSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         nome = validated_data.pop('nome')
         slug = slugify(nome)
-        categoria = Categoria.objects.create(
-            nome=nome, slug=slug, qtd_acessos=0)
+        categoria, c = Categoria.objects.get_or_create(
+            nome=nome, slug=slug)
         return categoria
 
     def update(self, instance, validated_data):
@@ -134,28 +134,62 @@ class CategoriaSerializer(serializers.ModelSerializer):
         return instance
 
 
+class ImagemProdutoSerializer(serializers.ModelSerializer):
+    imagem = Base64ImageField()
+
+    class Meta:
+        model = ImagemProduto
+        fields = ['id', 'imagem', 'produto', 'capa']
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        imagem = validated_data.pop('imagem')
+        produto = validated_data.pop('produto')
+        capa = validated_data.pop('capa')
+        imagem_produto = ImagemProduto.objects.create(
+            imagem=imagem, produto=produto)
+        if capa:
+            produto.imagens.update(capa=False)
+            imagem_produto.capa = True
+            imagem_produto.save()
+        return imagem_produto
+
+    def update(self, instance, validated_data):
+        instance.imagem = validated_data.get('imagem', instance.imagem)
+        instance.produto = validated_data.get('produto', instance.produto)
+        instance.capa = validated_data.get('capa', instance.capa)
+        if instance.capa:
+            produto.imagens.update(capa=False)
+            instance.capa = True
+        instance.save()
+        return instance
+
+
 class ProdutoSerializer(serializers.ModelSerializer):
-    logo = Base64ImageField(allow_null=True, required=False)
     categorias = CategoriaSerializer(many=True)
+    imagens = ImagemProdutoSerializer(many=True, required=False)
 
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor',
-                  'logo', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating', 'valor_atual']
+                  'imagens', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating', 'valor_atual']
         read_only_fields = ['id', 'rating', 'valor_atual']
 
     def create(self, validated_data):
-        logo = validated_data.get('logo', None)
-        try:
-            del validated_data['logo']
-        except KeyError:
-            pass
         categorias = validated_data.pop('categorias')
+        imagens = validated_data.get('imagens', None)
+        if imagens is None:
+            del validated_data['imagens']
         produto = Produto.objects.create(logo=logo, **validated_data)
+        if imagens:
+            imagem_serializer = ImagemProdutoSerializer(
+                data=imagens, many=True)
+            imagem_serializer.save()
 
-        for categoria in categorias:
-            c, _ = Categoria.objects.get_or_create(**categoria)
-            produto.categorias.add(c)
+        serializer = CategoriaSerializer(data=categoria, many=True)
+        serializer.is_valid(raise_exception=True)
+        categorias = serializer.save()
+        produto.categorias.add(*categorias)
         produto.save()
         return produto
 
@@ -169,11 +203,18 @@ class ProdutoSerializer(serializers.ModelSerializer):
         self.instance.qtd_limite = validated_data.get(
             'qtd_limite', self.instance.qtd_limite)
         categorias = validated_data.get('categorias', None)
+        imagens = validated_data.get('imagens', None)
 
         if categorias:
+            self.instance.categorias.clear()
             for categoria in categorias:
                 c, _ = Categoria.objects.get_or_create(**categoria)
                 self.instance.categorias.add(c)
+
+        if imagens:
+            self.instance.imagens.delete()
+            imgs = ImagemProdutoSerializer(data=imagens, many=True)
+            self.instance.imagens.add(*imgs)
         self.instance.save()
         return instance
 
@@ -250,7 +291,7 @@ class OfertaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Oferta
-        fields = ['id', 'owner', 'foto', 'valor',
+        fields = ['id', 'descricao', 'owner', 'foto', 'valor',
                   'produto', 'validade', 'is_banner']
         read_only_fields = ['id', 'owner']
 

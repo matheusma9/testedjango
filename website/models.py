@@ -148,6 +148,7 @@ class Carrinho(ModelDate):
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
 
     def atualizar_valor(self):
+        #qs = self.itens_carrinho.annotate(valor_atual)
         expression = Sum(F('valor') * F('quantidade'),
                          output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
         self.valor_total = self.itens_carrinho.aggregate(
@@ -302,6 +303,7 @@ class Oferta(ModelDate):
 
     owner = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='ofertas')
+    descricao = models.TextField('Descrição', null=True, blank=True)
     foto = models.ImageField(
         upload_to='website/images/ofertas', verbose_name='Foto',
         null=True, blank=True)
@@ -316,3 +318,19 @@ class Oferta(ModelDate):
 
     class Meta:
         ordering = ['-validade']
+
+
+class ImagemProduto(ModelDate):
+    produto = models.ForeignKey(
+        'website.Produto', on_delete=models.CASCADE, related_name='imagens')
+    imagem = models.ImageField(
+        upload_to='website/images', verbose_name='Imagem',
+        null=True, blank=True)
+    capa = models.BooleanField('É capa?', default=False, blank=True)
+
+    def __str__(self):
+        return str(self.produto) + '-' + str(self.capa)
+
+    class Meta:
+        verbose_name = 'Imagem do Produtos'
+        verbose_name_plural = 'Imagens dos Produtos'

@@ -3,7 +3,7 @@ from rest_framework import generics, mixins
 from rest_framework.views import APIView
 from .models import *
 from .serializers import *
-from rest_framework.exceptions import NotAuthenticated, ValidationError
+from rest_framework.exceptions import NotAuthenticated, ValidationError, PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -201,13 +201,12 @@ class ClienteViewSet(viewsets.ModelViewSet):
                             quantidade, error, messages)
                         if quantidade:
                             cliente.carrinho.itens_carrinho.create(produto=produto, carrinho=cliente.carrinho,
-                                                                   valor=produto.valor, quantidade=quantidade)
+                                                                   valor=produto.valor_atual, quantidade=quantidade)
                             cliente.carrinho.save()
 
                     else:
                         item, c = cliente.carrinho.itens_carrinho.get_or_create(
                             produto=produto, carrinho=cliente.carrinho)
-                        item.valor = produto.valor
                         item.quantidade, error, messages = produto.validar_qtd(
                             ((item.quantidade or 0) + quantidade), error, messages)
                         if item.quantidade:
@@ -338,7 +337,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
                 else:
                     item, c = cliente.carrinho.itens_carrinho.get_or_create(
                         produto=produto, carrinho=cliente.carrinho)
-                    item.valor = oferta.valor
                     item.quantidade, error, messages = produto.validar_qtd(
                         ((item.quantidade or 0) + quantidade), error, messages)
                     if item.quantidade:
@@ -363,9 +361,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
 
     """
 
-
     Endpoint relacionado aos produtos.
-
 
     """
     schema = CustomSchema()
@@ -402,6 +398,81 @@ class ProdutoViewSet(mixins.CreateModelMixin,
         produto.categorias.update(qtd_acessos=F('qtd_acessos') + 1)
         serializer = self.get_serializer(produto)
         return Response(serializer.data)
+
+    @action(methods=['post', 'delete'], detail=True)
+    def categorias(self, request, pk, *args, **kwargs):
+        if request.user.is_staff:
+            produto = Produto.objects.get(pk=pk)
+
+            if request.method == "POST":
+                try:
+                    data = request.data['categorias']
+                    for categoria in data:
+                        slug = slugify(categoria)
+                        c, _ = Categoria.objects.get_or_create(
+                            nome=categoria, slug=slug)
+                        produto.categorias.add(c)
+                    produto.save()
+                except KeyError:
+                    data = {'detail': 'O campo categoria é obrigatório'}
+                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+            if request.method == "DELETE":
+                try:
+                    data = request.data['categorias']
+                    for categoria in data:
+                        c = produto.categorias.get(slug=categoria)
+                        produto.categorias.remove(c)
+                    produto.save()
+                except KeyError:
+                    data = {'detail': 'O campo categoria é obrigatório'}
+                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = self.serializer_class(produto)
+            return Response(serializer.data)
+        else:
+            raise PermissionDenied
+
+    @action(methods=['post', 'delete'], detail=True)
+    def imagens(self, request, pk, *args, **kwargs):
+        if request.user.is_staff:
+            produto = Produto.objects.get(pk=pk)
+
+            if request.method == "POST":
+                try:
+                    data = request.data['imagens']
+
+                    for imagem in data:
+                        imagem['produto'] = produto.pk
+                        print(imagem)
+
+                    imgs_serializer = ImagemProdutoSerializer(
+                        data=data, many=True)
+                    imgs_serializer.is_valid(raise_exception=True)
+                    imgs_serializer.save()
+                except KeyError:
+                    data = {'detail': 'O campo imagens é obrigatório'}
+                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+            if request.method == "DELETE":
+                try:
+                    data = request.data['imagens']
+                    qs = ImagemProduto.objects.filter(pk__in=data)
+                    if not qs.filter(capa=True).exists():
+                        qs.remove()
+                        nova_capa = ImagemProduto.objects.first()
+                        nova_capa.capa = True
+                        nova_capa.save()
+                    else:
+                        qs.remove()
+                except KeyError:
+                    data = {'detail': 'O campo imagens é obrigatório'}
+                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = self.serializer_class(produto)
+            return Response(serializer.data)
+        else:
+            raise PermissionDenied
 
 
 class VendaViewSet(mixins.CreateModelMixin,
@@ -497,7 +568,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         """
         ---
         method_path:
-         /categorias/id/produtos/
+         /categorias/{id}/produtos/
         method_action:
          GET
         desc:
@@ -632,7 +703,8 @@ class OfertaViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        Oferta.objects.filter(produto__pk=request.data['produto']).delete()
+        oferta = Oferta.objects.filter(
+            produto__pk=request.data['produto']).delete()
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)

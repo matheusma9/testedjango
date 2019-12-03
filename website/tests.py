@@ -211,7 +211,7 @@ class OfertaTests(APITestCase):
         return Oferta.objects.create(owner=owner, valor=Decimal(
             "10.00"), validade='2035-11-26T15:40', produto=produto, is_banner=True)
 
-    def test_cria_oferta_error_403(self):
+    def test_criar_oferta_error_403(self):
         self.client.login(username='turing', password='senhama9')
         url = reverse('oferta-list')
         produto = Produto.objects.get()
@@ -219,13 +219,14 @@ class OfertaTests(APITestCase):
             'valor': '10.00',
             'produto': produto.pk,
             'validade': '2029-11-26T15:40',
-            'is_banner': True
+            'is_banner': True,
+            'descricao': 'teste'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(Oferta.objects.count(), 0)
 
-    def test_cria_oferta(self):
+    def test_criar_oferta(self):
         self.client.login(username='admin', password='senhama9')
         url = reverse('oferta-list')
         produto = Produto.objects.get()
@@ -233,14 +234,15 @@ class OfertaTests(APITestCase):
             'valor': '10.00',
             'produto': produto.pk,
             'validade': '2029-11-26T15:40',
-            'is_banner': True
+            'is_banner': True,
+            'descricao': 'teste'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Oferta.objects.count(), 1)
         self.assertEqual(Oferta.objects.get().owner.username, 'admin')
 
-    def test_cria_2_ofertas_do_mesmo_produto(self):
+    def test_criar_2_ofertas_do_mesmo_produto(self):
         self.client.login(username='admin', password='senhama9')
         url = reverse('oferta-list')
         produto = Produto.objects.get()
@@ -251,7 +253,8 @@ class OfertaTests(APITestCase):
             'valor': 11.00,
             'produto': produto.pk,
             'validade': '2034-11-26T15:40',
-            'is_banner': True
+            'is_banner': True,
+            'descricao': 'teste'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
