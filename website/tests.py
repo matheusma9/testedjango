@@ -1,12 +1,13 @@
 from django.test import TestCase
 from django.urls import reverse
+from django.contrib.auth.models import User
+
 from rest_framework import status
 from rest_framework.test import APITestCase
+
 from website.models import Cliente, Endereco, Carrinho, Categoria, Produto, ItemCarrinho, Venda, Oferta
-from django.contrib.auth.models import User
 from decimal import Decimal
 from rest_framework_jwt.settings import api_settings
-from decimal import Decimal
 # Create your tests here.
 
 

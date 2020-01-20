@@ -1,24 +1,34 @@
-from rest_framework import viewsets
-from rest_framework import generics, mixins
+# Rest Framework
+from rest_framework import viewsets, generics, mixins, filters, status
 from rest_framework.views import APIView
-from .models import *
-from .serializers import *
-from rest_framework.exceptions import NotAuthenticated, ValidationError, PermissionDenied
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser
-from website.recommender import recommender_produtos
+# Django
 from django.http import Http404
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters
-from website.permissions import IsStaffAndOwnerOrReadOnly, IsOwnerOrCreateOnly
-from .filters import *
-from .schema_view import CustomSchema
 from django.db.models import F, Count
-from rest_framework import status
 from django.utils import timezone
 from django.db.models.functions import Coalesce
+from django.utils.encoding import force_bytes, force_text
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.template.loader import render_to_string
+from django.core.mail import EmailMessage
+from django.conf import settings
+from django_filters.rest_framework import DjangoFilterBackend
+
+
+# Website
+from .recommender import recommender_produtos
+from .permissions import IsStaffAndOwnerOrReadOnly, IsOwnerOrCreateOnly, IsStaff
+from .models import *
+from .serializers import *
+from .filters import *
+from .schema_view import CustomSchema
+from .shortcuts import get_object_or_404
+from .tokens import account_activation_token
+from .fields import get_fields
 
 
 def list_response(viewset, model_serializer, qs, request):
@@ -48,9 +58,9 @@ class EnderecoViewSet(viewsets.ModelViewSet):
         Obter os clientes que possuem um determinado endereço.
 
         """
-        cliente = Cliente.objects.get(pk=pk)
-        serializer_data = VendaSerializer(cliente.vendas.all(), many=True).data
-        return Response(serializer_data)
+        endereco = self.get_object()
+        serializer = ClienteSerializer(endereco.clientes.all(), many=True)
+        return Response(serializer.data)
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -63,6 +73,78 @@ class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
     permission_classes = (IsOwnerOrCreateOnly, )
+
+    @action(methods=['post'], detail=False)
+    def solicitar(self, request):
+        """
+        ---
+        method_path:
+         /clientes/solicitar/
+        method_action:
+         POST
+        desc:
+         Solicitar alteração de senha.
+        input:
+        - name: email
+          desc: Email do usuário.
+          type: str
+          required: True
+          location: form
+        """
+        to_email, *_ = get_fields(request.data, ['email'])
+        user = get_object_or_404(User, email=to_email)
+        mail_subject = 'Solicitação para alteração de senha.'
+        message = render_to_string('website/pass_reset.html', {
+            'user': user,
+            'domain': settings.FRONT_END_HOST,
+            'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+            'token': account_activation_token.make_token(user),
+        })
+        email = EmailMessage(
+            mail_subject, message, to=[to_email]
+        )
+        email.send()
+        return Response({'message': 'A solicitação será enviada para o seu email.'})
+
+    @action(methods=['post'], detail=False)
+    def reset(self, request):
+        """
+        ---
+        method_path:
+         /clientes/reset/
+        method_action:
+         POST
+        desc:
+         Alterar senha.
+        input:
+        - name: uid
+          desc: Uid do usuário.
+          type: str
+          required: True
+          location: form
+        - name: token
+          desc: token do usuário.
+          type: str
+          required: True
+          location: form
+        - name: password
+          desc: Nova senha do usuário.
+          type: str
+          required: True
+          location: form
+        """
+        uidb64, token, password = get_fields(
+            request.data, ['uid', 'token', 'password'])
+        try:
+            uid = force_text(urlsafe_base64_decode(uidb64))
+            user = get_object_or_404(User, pk=uid)
+        except(TypeError, ValueError, OverflowError):
+            user = None
+        if user is not None and account_activation_token.check_token(user, token):
+            user.set_password(password)
+            user.save()
+            return Response({'message': 'Senha alterada com sucesso'})
+        return Response({'message': 'Token ou uid inválido'}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=['get', 'post'], detail=False)
     def enderecos(self, request):
@@ -118,174 +200,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
         try:
             cliente = self.get_object()
             return list_response(self, AvaliacaoProdutoSerializer, cliente.avaliacoes_produto.all(), request)
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['post', 'get', 'patch', 'delete'], detail=False)
-    def carrinho(self, request):
-        """
-        ---
-        method_path:
-         /clientes/carrinho/
-        method_action:
-         POST
-        desc:
-         Adicionar produto no carrinho.
-        input:
-        - name: produto
-          desc: Id do produto que vai ser adicionado.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Quantidade de itens que serão adicionados.
-          type: integer
-          required: True
-          location: form
-          elements:
-            produto: integer
-            quantidade: integer
-        ---
-        method_path:
-         /clientes/carrinho/
-        method_action:
-         GET
-        desc:
-         Visualizar carrinho de cliente.
-        ---
-        method_action:
-         PATCH
-        desc:
-         Editar produto do carrinho.
-        input:
-        - name: produto
-          desc: Id do produto que vai ser alterado.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Nova quantidade de itens.
-          type: integer
-          required: True
-          location: form
-        ---
-        method_path:
-         /clientes/carrinho/
-        method_action:
-         DELETE
-        desc:
-         Remover produto do carrinho.
-        input:
-        - name: produto
-          desc: Id do produto que vai ser removido.
-          type: integer
-          required: True
-          location: form
-        """
-        try:
-            if request.user.is_authenticated:
-                cliente = self.get_queryset().get(user=request.user)
-                error = False
-                messages = []
-                created = False
-                if not cliente.carrinho:
-                    created = True
-                    cliente.carrinho = Carrinho.objects.create()
-                    cliente.save()
-
-                if request.method == 'POST':
-                    produto = Produto.objects.get(pk=request.data['produto'])
-                    quantidade = request.data['quantidade']
-                    if created:
-                        quantidade, error, messages = produto.validar_qtd(
-                            quantidade, error, messages)
-                        if quantidade:
-                            cliente.carrinho.itens_carrinho.create(produto=produto, carrinho=cliente.carrinho,
-                                                                   valor=produto.valor_atual, quantidade=quantidade)
-                            cliente.carrinho.save()
-
-                    else:
-                        item, c = cliente.carrinho.itens_carrinho.get_or_create(
-                            produto=produto, carrinho=cliente.carrinho)
-                        item.quantidade, error, messages = produto.validar_qtd(
-                            ((item.quantidade or 0) + quantidade), error, messages)
-                        if item.quantidade:
-                            item.save()
-                        else:
-                            item.delete()
-
-                if request.method == 'PATCH':
-                    produto = Produto.objects.get(pk=request.data['produto'])
-                    quantidade = request.data['quantidade']
-                    quantidade, error, messages = produto.validar_qtd(
-                        quantidade, error, messages)
-                    item = cliente.carrinho.itens_carrinho.get(produto=produto)
-                    item.quantidade = quantidade
-                    item.save()
-
-                if request.method == 'DELETE':
-                    produto = Produto.objects.get(pk=request.data['produto'])
-                    item = cliente.carrinho.itens_carrinho.get(produto=produto)
-                    item.delete()
-
-                cliente.carrinho.atualizar_valor()
-                serializer = CarrinhoSerializer(cliente.carrinho)
-                data = serializer.data
-                data['messages'] = messages
-                data['error'] = error
-                return Response(data)
-            else:
-                raise NotAuthenticated()
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['post'], detail=False)
-    def compra(self, request):
-        """
-        ---
-        method_path:
-         /clientes/compra/
-        method_action:
-         POST
-        desc:
-         Comprar produtos do carrinho.
-        input:
-        - name: itens
-          desc: Lista de itens(produto, quantidade) que serão comprados.
-          type: array
-          required: False
-          location: form
-        - name: endereco
-          desc: Id do Endereco de entrega
-          type: int
-          required: True
-          location: form
-        """
-        try:
-            if request.user.is_authenticated:
-                cliente = Cliente.objects.get(user=request.user)
-                carrinho = Carrinho.objects.get(cliente=cliente)
-                endereco_pk = request.data.get('endereco', None)
-                if endereco_pk:
-                    endereco = cliente.enderecos.get(pk=endereco_pk)
-                    itens = request.data.get('itens', [])
-                    for item in itens:
-                        carrinho.itens_carrinho.filter(
-                            produto__pk=item['produto']).update(quantidade=item['quantidade'])
-                        carrinho.save()
-                    carrinho.atualizar_valor()
-                    venda = carrinho.to_venda()
-                    venda.endereco_entrega = endereco
-                    venda.save()
-                    carrinho.itens_carrinho.all().delete()
-                    carrinho.atualizar_valor()
-                    serializer = VendaSerializer(venda)
-                    return Response(serializer.data)
-                else:
-                    data = {'detail': 'O campo endereço é obrigatório'}
-                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                raise NotAuthenticated
         except models.ObjectDoesNotExist:
             raise Http404
 
@@ -385,7 +299,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
         """
 
         queryset = self.filter_queryset(self.get_queryset())
-        slugs = request.GET.get('tags', None)
+        slugs = request.query_params.get('tags', None)
         if slugs:
             slugs = slugs.split(',')
             categorias = Categoria.objects.filter(slug__in=slugs)
@@ -504,8 +418,8 @@ class VendaViewSet(mixins.CreateModelMixin,
           required: false
           location: query
         """
-        inicio = request.GET.get('inicio', None)
-        fim = request.GET.get('fim', None)
+        inicio = request.query_params.get('inicio', None)
+        fim = request.query_params.get('fim', None)
         qs = self.get_queryset()
         if inicio is not None and fim is not None:
             qs = qs.filter(created_at__range=(inicio, fim))
@@ -532,7 +446,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     """
     serializer_class = CategoriaSerializer
     queryset = Categoria.objects.all()
-    permission_classes = (IsAuthenticatedOrReadOnly,)
+    permission_classes = (IsStaff,)
     schema = CustomSchema()
 
     def list(self, request, *args, **kwargs):
@@ -558,7 +472,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           location: query 
 
         """
-        n = int(request.GET.get('quantidade', 20))
+        n = int(request.query_params.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
@@ -581,7 +495,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           location: query 
 
         """
-        search = request.GET.get('search', None)
+        search = request.query_params.get('search', None)
         categoria = self.get_object()
         categoria.qtd_acessos += 1
         categoria.save()
@@ -653,7 +567,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           required: False
           location: query 
         """
-        n = int(request.GET.get('quantidade', 20))
+        n = int(request.query_params.get('quantidade', 20))
         top_categorias = self.get_queryset().annotate(n_vendas=Count('produtos__itens_vendas')
                                                       ).values('nome', 'slug', 'qtd_acessos', 'n_vendas').order_by('-n_vendas')
         return Response(top_categorias[:n])
@@ -685,7 +599,8 @@ class CategoriaViewSet(viewsets.ModelViewSet):
           required: False
           location: query 
         """
-        n = int(request.GET.get('quantidade', 20))
+
+        n = int(request.query_params.get('quantidade', 20))
         expression = models.ExpressionWrapper(F('produtos__itens_vendas__valor')*F('produtos__itens_vendas__quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
         top_categorias = qs = Categoria.objects.annotate(receita_item=expression).values('slug').annotate(
@@ -714,3 +629,206 @@ class OfertaViewSet(viewsets.ModelViewSet):
         oferta.produto.categorias.update(qtd_acessos=F('qtd_acessos') + 1)
         serializer = self.get_serializer(oferta)
         return Response(serializer.data)
+
+
+class CarrinhoViewSet(mixins.RetrieveModelMixin,
+                      viewsets.GenericViewSet):
+    """
+    Endpoint relacionado aos carrinhos.
+    """
+    schema = CustomSchema()
+    serializer_class = CarrinhoSerializer
+    queryset = Carrinho.objects.all()
+
+    def adicionar_item(self, request, item, quantidade, pk=0):
+        error, messages = False, []
+        if request.user.is_authenticated:
+            cliente = get_object_or_404(Cliente, user=request.user)
+            if pk and cliente.carrinho.pk != pk:
+                raise PermissionDenied(
+                    'O cliente não tem permissão para alterar esse carrinho')
+            carrinho = cliente.carrinho
+        else:
+            carrinho = Carrinho.objects.get(
+                pk=pk) if pk else Carrinho.objects.create()
+        produto = get_object_or_404(Produto, pk=item)
+        carrinho, error, messages = carrinho.adicionar_item(
+            produto, quantidade, error, messages)
+        carrinho.atualizar_valor()
+        return carrinho, error, messages
+
+    @action(methods=['post'], detail=False, url_path='itens')
+    def first_itens(self, request):
+        """
+        ---
+        method_path:
+         /carrinhos/itens/
+        method_action:
+         POST
+        desc:
+         Adicionar produto no carrinho pela primeira vez.
+        input:
+        - name: produto
+          desc: Id do produto que vai ser adicionado.
+          type: integer
+          required: True
+          location: form
+        - name: quantidade
+          desc: Quantidade de itens que serão adicionados.
+          type: integer
+          required: True
+          location: form
+          elements:
+            produto: integer
+            quantidade: integer
+        """
+        carrinho, error, messages = self.adicionar_item(
+            request, request.data['produto'], request.data['quantidade'])
+        serializer = self.get_serializer(carrinho)
+        data = serializer.data
+        data['messages'] = messages
+        data['error'] = error
+        return Response(data)
+
+    @action(methods=['post', 'patch'], detail=True)
+    def itens(self, request, pk):
+        """
+        ---
+        method_path:
+         /carrinhos/{id}/itens/
+        method_action:
+         POST
+        desc:
+         Adicionar produto no carrinho.
+        input:
+        - name: produto
+          desc: Id do produto que vai ser adicionado.
+          type: integer
+          required: True
+          location: form
+        - name: quantidade
+          desc: Quantidade de itens que serão adicionados.
+          type: integer
+          required: True
+          location: form
+          elements:
+            produto: integer
+            quantidade: integer
+        ---
+        method_action:
+         PATCH
+        desc:
+         Editar produto do carrinho.
+        input:
+        - name: produto
+          desc: Id do produto que vai ser alterado.
+          type: integer
+          required: True
+          location: form
+        - name: quantidade
+          desc: Nova quantidade de itens.
+          type: integer
+          required: True
+          location: form
+        """
+        if request.method == 'POST':
+            carrinho, error, messages = self.adicionar_item(
+                request, request.data['produto'], request.data['quantidade'], int(pk))
+
+        elif request.method == 'PATCH':
+            error, messages = False, []
+            carrinho = self.get_object()
+            produto = Produto.objects.get(pk=request.data['produto'])
+            quantidade = request.data['quantidade']
+            quantidade, error, messages = produto.validar_qtd(
+                quantidade, error, messages)
+            item = get_object_or_404(
+                ItemCarrinho, carrinho=carrinho, produto=produto)
+            item.quantidade = quantidade
+            item.save()
+            carrinho.atualizar_valor()
+
+        serializer = self.get_serializer(carrinho)
+        data = serializer.data
+        data['messages'] = messages
+        data['error'] = error
+        return Response(data)
+
+    @action(methods=['delete'], detail=True, url_path='itens/(?P<produto_id>[^/.]+)')
+    def remover_item(self, request, pk, produto_id):
+        """
+        ---
+        method_path:
+         /carrinhos/{id}/itens/{produto_id}/
+        method_action:
+         DELETE
+        desc:
+         Remover produto do carrinho.
+        input:
+        - name: produto_id
+          desc: Id do produto que vai ser removido.
+          type: integer
+          required: True
+          location: path
+        """
+        carrinho = self.get_object()
+        error = False
+        messages = []
+        created = False
+        produto = get_object_or_404(Produto, pk=produto_id)
+        item = get_object_or_404(
+            ItemCarrinho, carrinho=carrinho, produto=produto)
+        item.delete()
+        carrinho.atualizar_valor()
+        serializer = CarrinhoSerializer(carrinho)
+        data = serializer.data
+        data['messages'] = messages
+        data['error'] = error
+        return Response(data)
+
+    @action(methods=['post'], detail=True)
+    def compra(self, request, pk):
+        """
+        ---
+        method_path:
+         /carrinhos/{id}/compra/
+        method_action:
+         POST
+        desc:
+         Comprar produtos do carrinho.
+        input:
+        - name: itens
+          desc: Lista de itens(produto, quantidade) que serão comprados.
+          type: array
+          required: False
+          location: form
+        - name: endereco
+          desc: Id do Endereco de entrega
+          type: integer
+          required: True
+          location: form
+        """
+        if request.user.is_authenticated:
+            messages = []
+            error = []
+            cliente = Cliente.objects.get(user=request.user)
+            created = False
+            endereco_pk, *_ = get_fields(request.data, ['endereco'])
+            endereco = cliente.enderecos.get(pk=endereco_pk)
+            if cliente.carrinho.itens_carrinho.count():
+                cliente.carrinho.atualizar_valor()
+                venda = cliente.carrinho.to_venda()
+                venda.endereco_entrega = endereco
+                venda.save()
+                cliente.carrinho.itens_carrinho.all().delete()
+                cliente.carrinho.atualizar_valor()
+                serializer = VendaSerializer(venda)
+                data = serializer.data
+                data['messages'] = messages
+                data['error'] = error
+                return Response(data)
+            else:
+                data = {'detail': 'O carrinho está vazio'}
+                return Response(data, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            raise NotAuthenticated

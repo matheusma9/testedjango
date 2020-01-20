@@ -1,11 +1,14 @@
 from django.db import models
-from rest_framework import serializers
 from django.db.models import F, Sum, Avg
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 from django.utils import timezone
-from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.validators import MaxValueValidator, MinValueValidator
-from taggit.managers import TaggableManager
+
+
+from rest_framework import serializers
+from decimal import Decimal
 from slugify import slugify
 # Create your models here.
 
@@ -50,7 +53,7 @@ class Endereco(ModelDate):
 
     bairro = models.CharField('Bairro', max_length=50)
     rua = models.CharField('Rua', max_length=50)
-    numero_casa = models.CharField('Número', max_length=5)
+    numero_casa = models.PositiveIntegerField('Número')
     complemento = models.CharField(
         'Complemento', max_length=50, blank=True, null=True)
     cep = models.CharField('CEP', max_length=10)
@@ -93,7 +96,7 @@ class Produto(ModelDate):
         'website.Categoria', related_name='produtos')
     avaliacoes = models.ManyToManyField(
         'website.Cliente', through='AvaliacaoProduto')
-
+    '''
     @property
     def valor_atual(self):
         queryset = Oferta.objects.filter(
@@ -102,6 +105,7 @@ class Produto(ModelDate):
             return queryset[0].valor
         else:
             return self.valor
+    '''
 
     @property
     def rating(self):
@@ -133,7 +137,7 @@ class Produto(ModelDate):
             error = True
             messages.append('O item ' +
                             str(self) +
-                            ' tem uma quantidade em estoque menor do que a desejada')
+                            ' tem uma quantidade limite menor do que a desejada')
         return quantidade, error, messages
 
     class Meta:
@@ -147,13 +151,46 @@ class Carrinho(ModelDate):
     valor_total = models.DecimalField(
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
 
+    def associar(self, other):
+        if isinstance(other, Carrinho):
+            error = []
+            messages = []
+            if other.pk != self.pk:
+                for item in other.itens_carrinho.all():
+                    item_carrinho, error, messages = self.adicionar_item(
+                        item.produto, item.quantidade, error, messages)
+                self.atualizar_valor()
+                other.delete()
+        else:
+            raise TypeError("O objeto 'other' deve ser do tipo Carrinho")
+        return error, messages
+
+    def adicionar_item(self, produto, quantidade, error, messages):
+        if produto.qtd_estoque:
+            item_carrinho, _ = ItemCarrinho.objects.get_or_create(
+                carrinho=self, produto=produto)
+            quantidade, error, messages = produto.validar_qtd(
+                (item_carrinho.quantidade or 0) + quantidade, error, messages)
+            item_carrinho.quantidade = quantidade
+            item_carrinho.save()
+        else:
+            error = True
+            messages.append('O item ' +
+                            str(self) + ' está fora de estoque')
+        return self, error, messages
+
     def atualizar_valor(self):
         #qs = self.itens_carrinho.annotate(valor_atual)
+        self.atualizar_itens()
         expression = Sum(F('valor') * F('quantidade'),
                          output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
         self.valor_total = self.itens_carrinho.aggregate(
             valor_total=expression)['valor_total'] or Decimal('0.00')
         self.save()
+
+    def atualizar_itens(self):
+        for item in self.itens_carrinho.all():
+            item.atualizar_valor()
 
     def to_venda(self):
         venda = Venda(cliente=self.cliente,
@@ -181,6 +218,13 @@ class Carrinho(ModelDate):
         venda.save()
         return venda
 
+    def print_itens(self):
+        for item in self.itens_carrinho.all():
+            print(item.produto, '-', item.quantidade)
+
+    def __str__(self):
+        return str(self.pk) + ' - ' + str(self.valor_total)
+
 
 class ItemCarrinho(ModelDate):
     carrinho = models.ForeignKey(
@@ -191,6 +235,15 @@ class ItemCarrinho(ModelDate):
         'Valor', max_digits=10, decimal_places=2, null=True)
     quantidade = models.PositiveIntegerField('Quantidade', null=True)
 
+    def atualizar_valor(self):
+        queryset = Oferta.objects.filter(
+            validade__gte=timezone.now(), produto=self.produto).exclude(pk=self.pk)
+        if queryset.exists():
+            self.valor = queryset[0].valor
+        else:
+            self.valor = self.produto.valor
+        self.save()
+
     def __str__(self):
         return str(self.carrinho.pk) + '-' + self.produto.descricao
 
@@ -198,6 +251,7 @@ class ItemCarrinho(ModelDate):
         verbose_name = 'Item do carrinho'
         verbose_name_plural = 'Itens dos carrinhos'
         ordering = ['-update_at']
+        unique_together = [('carrinho', 'produto')]
 
 
 class Cliente(ModelDate):
@@ -334,3 +388,46 @@ class ImagemProduto(ModelDate):
     class Meta:
         verbose_name = 'Imagem do Produtos'
         verbose_name_plural = 'Imagens dos Produtos'
+
+
+@receiver(post_save, sender=Oferta)
+def update_valor_oferta(sender, instance, **kwargs):
+    if instance.validade > timezone.now():
+        instance.produto.itens_carrinhos.update(valor=instance.valor)
+
+
+@receiver(post_delete, sender=Oferta)
+def update_valor_oferta(sender, instance, **kwargs):
+    valor = Decimal('0.00')
+    queryset = Oferta.objects.filter(
+        validade__gte=timezone.now(), produto=instance.produto).exclude(pk=instance.pk)
+    if queryset.exists():
+        valor = queryset[0].valor
+    else:
+        valor = instance.produto.valor
+    instance.produto.itens_carrinhos.update(valor=valor)
+
+
+@receiver([post_save], sender=Produto)
+def update_valor_produto(sender, instance, *args, **kwargs):
+    valor = Decimal('0.00')
+    queryset = Oferta.objects.filter(
+        validade__gte=timezone.now(), produto=instance)
+    if queryset.exists():
+        valor = queryset[0].valor
+    else:
+        valor = instance.valor
+    instance.itens_carrinhos.update(valor=valor)
+
+
+'''
+from website.models import *
+p = Produto.objects.get(descricao='Coca-cola')
+c2 = Carrinho.objects.create()
+ItemCarrinho.objects.create(carrinho=c2, quantidade=4, produto=p)
+c1 = Carrinho.objects.create()
+ItemCarrinho.objects.create(carrinho=c1, quantidade=4, produto=p)
+c2.associar(c1)
+c2.delete()
+
+'''

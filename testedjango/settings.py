@@ -119,9 +119,27 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '1/day',
+        'user': '1000/day'
+    },
     # 'DEFAULT_PERMISSION_CLASSES': (
     #    'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     # ),
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework_xml.parsers.XMLParser',
+    ],
+
+    # 'DEFAULT_RENDERER_CLASSES': [
+    #    'rest_framework.renderers.JSONRenderer',
+    #    'rest_framework_xml.renderers.XMLRenderer',
+    #    'rest_framework.renderers.BrowsableAPIRenderer',
+    # ],
     "DATE_INPUT_FORMATS": ["%d/%m/%Y"],
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -192,3 +210,12 @@ MEDIA_URL = '/media/'
 CORS_ORIGIN_ALLOW_ALL = True
 
 # django_heroku.settings(locals())
+
+EMAIL_USE_TLS = True
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST_USER = 'lojavirtual.ma9@gmail.com'
+EMAIL_HOST_PASSWORD = 'ma9*1234'
+EMAIL_PORT = 587
+
+# Front-end
+FRONT_END_HOST = '192.168.15.126:4200'

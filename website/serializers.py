@@ -1,11 +1,11 @@
 from rest_framework import serializers
-from .models import *
-from decimal import Decimal
 from django.contrib.auth.models import User
+
+from .models import *
+from .recommender import recommender_produtos
+
+from decimal import Decimal
 from drf_extra_fields.fields import Base64ImageField
-from website.recommender import recommender_produtos
-from taggit_serializer.serializers import (TagListSerializerField,
-                                           TaggitSerializer)
 from slugify import slugify
 
 
@@ -172,8 +172,8 @@ class ProdutoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor',
-                  'imagens', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating', 'valor_atual']
-        read_only_fields = ['id', 'rating', 'valor_atual']
+                  'imagens', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating']
+        read_only_fields = ['id', 'rating']
 
     def create(self, validated_data):
         categorias = validated_data.pop('categorias')

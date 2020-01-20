@@ -1,14 +1,18 @@
 from django.shortcuts import render
-from rest_framework_jwt.settings import api_settings
-from rest_framework_jwt.views import ObtainJSONWebToken
-from .serializers import ClienteSerializer
-from .models import Cliente
-from rest_framework.response import Response
-from rest_framework import status
 from django.contrib.auth.models import User
+
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAdminUser
 from rest_framework import status
+from rest_framework.response import Response
+
+from rest_framework_jwt.settings import api_settings
+from rest_framework_jwt.views import ObtainJSONWebToken
+
+from .serializers import ClienteSerializer
+from .models import Cliente, Carrinho
+from .shortcuts import get_object_or_404
+from .schema_view import CustomSchema
 # Create your views here.
 jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
 jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
@@ -62,7 +66,34 @@ class StaffView(APIView):
 
 
 class LoginView(ObtainJSONWebToken):
+    schema = CustomSchema()
+
     def post(self, request, *args, **kwargs):
+        """
+        ---
+        method_path:
+         /login/
+        method_action:
+         POST
+        desc:
+         Logar no sistema.
+        input:
+        - name: username
+          desc: Username do usuário.
+          type: str
+          required: True
+          location: form
+        - name: password
+          desc: Senha do usuário.
+          type: str
+          required: True
+          location: form
+        - name: carrinho
+          desc: Id do carrinho que o usuário estava usando antes de logar.
+          type: integer
+          required: False
+          location: form
+        """
         # by default attempts username / passsword combination
         response = super(LoginView, self).post(request, *args, **kwargs)
         # token = response.data['token']  # don't use this to prevent errors
@@ -100,12 +131,28 @@ class LoginView(ObtainJSONWebToken):
             payload = jwt_payload_handler(user)
             token = jwt_encode_handler(payload)
             cliente = Cliente.objects.get(user__username=user['username'])
+        carrinho_pk = request.data.get('carrinho', 0)
+        carrinho = get_object_or_404(Carrinho,
+                                     pk=carrinho_pk) if carrinho_pk else None
+        error, messages = True, []
+        if not cliente.carrinho:
+            cliente.carrinho = carrinho or Carrinho.objects.create()
+            cliente.save()
+        else:
+            if carrinho:
+                error, messages = cliente.carrinho.associar(carrinho)
+
+        if cliente.carrinho.itens_carrinho.count():
+            cliente.carrinho.atualizar_valor()
 
         return Response({'success': True,
                          'message': 'Successfully logged in',
                          'token': token,
                          'cliente': cliente.pk,
-                         'is_staff': cliente.user.is_staff},
+                         'is_staff': cliente.user.is_staff,
+                         'error': error,
+                         'messages': messages,
+                         'carrinho': cliente.carrinho.pk},
                         status=status.HTTP_200_OK)
 
 

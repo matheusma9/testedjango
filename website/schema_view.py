@@ -15,6 +15,10 @@ def simple2schema(stype,  description):
         return coreschema.Array(description=description)
 
 
+def in_path(field):
+    return field.location == 'path' and field.name == 'id'
+
+
 class CustomSchema(AutoSchema):
     def get_link(self, path, method, base_url):
 
@@ -36,6 +40,7 @@ class CustomSchema(AutoSchema):
             a = method_docstring.split('---')
         except:
             fields += self.get_serializer_fields(path, method)
+
         else:
 
             for i in range(0, len(a)):
@@ -43,7 +48,8 @@ class CustomSchema(AutoSchema):
                 yaml_doc = None
                 if method_docstring:
                     try:
-                        yaml_doc = yaml.load(a[i])
+                        yaml_doc = yaml.load(
+                            a[i], Loader=yaml.loader.FullLoader)
                     except:
                         yaml_doc = None
 
@@ -52,9 +58,9 @@ class CustomSchema(AutoSchema):
                     method_action = yaml_doc.get('method_action', '')
                     method_path = yaml_doc.get('method_path', '')
                     if (method_action == '' or method == method_action) and (method_path == '' or path == method_path):
-
                         if not method_action == 'GET':
-                            fields = []
+                            fields = list(filter(in_path, fields))
+
                         _desc = yaml_doc.get('desc', '')
 
                         _method_desc = _desc
@@ -66,8 +72,6 @@ class CustomSchema(AutoSchema):
                             _type = i.get('type', 'string')
                             _location = i.get('location', 'form')
                             _elements = i.get('elements', None)
-                            if _elements:
-                                print(_elements)
                             field = coreapi.Field(
                                 name=_name,
                                 location=_location,

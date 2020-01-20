@@ -21,6 +21,15 @@ class IsStaffAndOwnerOrReadOnly(BasePermission):
         )
 
 
+class IsStaff(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.is_staff
+        )
+
+
 class IsOwnerOrCreateOnly(BasePermission):
     """
     The request is authenticated as a user, or is a read-only request.
