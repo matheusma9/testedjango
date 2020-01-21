@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import F, Sum, Avg
+from django.db.models import F, Sum, Avg, Count
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
@@ -80,6 +80,22 @@ class Categoria(ModelDate):
 
     class Meta:
         ordering = ['nome']
+
+    @property
+    def receita(self):
+        expression = models.ExpressionWrapper(
+            F('itens_vendas__valor')*F('itens_vendas__quantidade'),
+            output_field=models.DecimalField(
+                max_digits=10, decimal_places=2,
+                default=Decimal('0.00')))
+
+        return self.produtos.annotate(receita=expression).aggregate(
+            Sum('receita'))['receita__sum'] or Decimal('0.0')
+
+    @property
+    def vendas(self):
+        return self.produtos.annotate(n_vendas=Count('itens_vendas')).aggregate(
+            Sum('n_vendas'))['n_vendas__sum'] or 0
 
 
 class Produto(ModelDate):
@@ -180,10 +196,13 @@ class Carrinho(ModelDate):
         return self, error, messages
 
     def atualizar_valor(self):
-        #qs = self.itens_carrinho.annotate(valor_atual)
         self.atualizar_itens()
-        expression = Sum(F('valor') * F('quantidade'),
-                         output_field=models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00')))
+        expression = Sum(
+            F('valor') * F('quantidade'),
+            output_field=models.DecimalField(
+                max_digits=10, decimal_places=2,
+                default=Decimal('0.00')))
+
         self.valor_total = self.itens_carrinho.aggregate(
             valor_total=expression)['valor_total'] or Decimal('0.00')
         self.save()
@@ -203,7 +222,9 @@ class Carrinho(ModelDate):
                     'O item ' + str(item.produto) + ' está fora de estoque.')
             if item.quantidade <= item.produto.qtd_estoque:
                 item_venda = ItemVenda(
-                    venda=venda, produto=item.produto, valor=item.valor, quantidade=item.quantidade)
+                    venda=venda, produto=item.produto,
+                    valor=item.valor,
+                    quantidade=item.quantidade)
                 item_venda.save()
                 venda.itens.add(item_venda)
             else:
@@ -390,6 +411,8 @@ class ImagemProduto(ModelDate):
         verbose_name_plural = 'Imagens dos Produtos'
 
 
+'''
+
 @receiver(post_save, sender=Oferta)
 def update_valor_oferta(sender, instance, **kwargs):
     if instance.validade > timezone.now():
@@ -420,7 +443,6 @@ def update_valor_produto(sender, instance, *args, **kwargs):
     instance.itens_carrinhos.update(valor=valor)
 
 
-'''
 from website.models import *
 p = Produto.objects.get(descricao='Coca-cola')
 c2 = Carrinho.objects.create()

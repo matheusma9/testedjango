@@ -21,7 +21,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 # Website
 from .recommender import recommender_produtos
-from .permissions import IsStaffAndOwnerOrReadOnly, IsOwnerOrCreateOnly, IsStaff
+from .permissions import IsStaffAndOwnerOrReadOnly, IsOwnerOrCreateOnly, IsStaff, CarrinhoPermission
 from .models import *
 from .serializers import *
 from .filters import *
@@ -486,14 +486,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         method_action:
          GET
         desc:
-         Categorias mais acessadas.
-        input:
-        - name: search
-          desc: Número de categorias listadas.
-          type: integer
-          required: False
-          location: query 
-
+         Produtos da categoria.
         """
         search = request.query_params.get('search', None)
         categoria = self.get_object()
@@ -507,37 +500,21 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         serializer = ProdutoSerializer(qs, many=True)
         return list_response(self, ProdutoSerializer, qs, request)
 
-    @action(methods=['get'], detail=True)
-    def info(self, request, pk):
+    @action(methods=['get'], detail=True,  url_path='info', url_name='info')
+    def info(self, request, pk, *args, **kwargs):
+        """
+        ---
+        method_path:
+         /categorias/{id}/info/
+        method_action:
+         GET
+        desc:
+         Informação de uma categoria.
+        """
         c = self.get_object()
         data = self.serializer_class(c).data
-        expression = models.ExpressionWrapper(F('itens_vendas__valor')*F('itens_vendas__quantidade'), output_field=models.DecimalField(
-            max_digits=10, decimal_places=2, default=Decimal('0.00')))
-        res = c.produtos.annotate(n_vendas=Count('itens_vendas'), receita=expression).aggregate(
-            Sum('receita'), Sum('n_vendas')
-        )
-        data['n_vendas'] = res['n_vendas__sum'] or 0
-        data['receita'] = res['receita__sum'] or 0
-        return Response(data)
-
-    @action(methods=['get'], detail=True, url_path='compras', url_name='compras')
-    def n_vendas(self, request, pk, *args, **kwargs):
-        c = self.get_object()
-        data = self.serializer_class(c).data
-        n_vendas = c.produtos.annotate(n_vendas=Count('itens_vendas')).aggregate(
-            Sum('n_vendas'))['n_vendas__sum']
-        data['n_vendas'] = n_vendas or 0
-        return Response(data)
-
-    @action(methods=['get'], detail=True,  url_path='receita', url_name='receita')
-    def categoria_receita(self, request, pk, *args, **kwargs):
-        c = self.get_object()
-        data = self.serializer_class(c).data
-        expression = models.ExpressionWrapper(F('itens_vendas__valor')*F('itens_vendas__quantidade'), output_field=models.DecimalField(
-            max_digits=10, decimal_places=2, default=Decimal('0.00')))
-        receita = c.produtos.annotate(receita=expression).aggregate(
-            Sum('receita'))['receita__sum']
-        data['receita'] = receita or Decimal('0.0')
+        data['receita'] = c.receita
+        data['n_vendas'] = c.vendas
         return Response(data)
 
     @action(methods=['get'], detail=False)
@@ -603,7 +580,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         n = int(request.query_params.get('quantidade', 20))
         expression = models.ExpressionWrapper(F('produtos__itens_vendas__valor')*F('produtos__itens_vendas__quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
-        top_categorias = qs = Categoria.objects.annotate(receita_item=expression).values('slug').annotate(
+        top_categorias = Categoria.objects.annotate(receita_item=expression).values('slug').annotate(
             receita=Coalesce(Sum('receita_item'), 0)).values('nome', 'slug', 'qtd_acessos', 'receita')
         return Response(top_categorias.order_by('-receita')[:n])
 
@@ -639,6 +616,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
     schema = CustomSchema()
     serializer_class = CarrinhoSerializer
     queryset = Carrinho.objects.all()
+    permission_classes = [CarrinhoPermission]
 
     def adicionar_item(self, request, item, quantidade, pk=0):
         error, messages = False, []
@@ -654,7 +632,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
         produto = get_object_or_404(Produto, pk=item)
         carrinho, error, messages = carrinho.adicionar_item(
             produto, quantidade, error, messages)
-        carrinho.atualizar_valor()
+        # carrinho.atualizar_valor()
         return carrinho, error, messages
 
     @action(methods=['post'], detail=False, url_path='itens')
@@ -746,7 +724,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
                 ItemCarrinho, carrinho=carrinho, produto=produto)
             item.quantidade = quantidade
             item.save()
-            carrinho.atualizar_valor()
+            # carrinho.atualizar_valor()
 
         serializer = self.get_serializer(carrinho)
         data = serializer.data
@@ -779,7 +757,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
         item = get_object_or_404(
             ItemCarrinho, carrinho=carrinho, produto=produto)
         item.delete()
-        carrinho.atualizar_valor()
+        # carrinho.atualizar_valor()
         serializer = CarrinhoSerializer(carrinho)
         data = serializer.data
         data['messages'] = messages
@@ -816,7 +794,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
             endereco_pk, *_ = get_fields(request.data, ['endereco'])
             endereco = cliente.enderecos.get(pk=endereco_pk)
             if cliente.carrinho.itens_carrinho.count():
-                cliente.carrinho.atualizar_valor()
+                # cliente.carrinho.atualizar_valor()
                 venda = cliente.carrinho.to_venda()
                 venda.endereco_entrega = endereco
                 venda.save()

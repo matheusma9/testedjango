@@ -133,6 +133,7 @@ REST_FRAMEWORK = {
     #    'rest_framework.renderers.BrowsableAPIRenderer',
     # ],
     "DATE_INPUT_FORMATS": ["%d/%m/%Y"],
+    "DATETIME_INPUT_FORMATS": ["%d/%m/%YT%H:%M"],
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_jwt.authentication.JSONWebTokenAuthentication',

@@ -20,6 +20,12 @@ class ItemCarrinhoSerializer(serializers.ModelSerializer):
 class CarrinhoSerializer(serializers.ModelSerializer):
     itens = ItemCarrinhoSerializer(source="itens_carrinho", many=True)
 
+    @property
+    def data(self):
+        if self.instance is not None:
+            self.instance.atualizar_valor()
+        return super().data
+
     class Meta:
         model = Carrinho
         fields = ['id', 'valor_total', 'itens']

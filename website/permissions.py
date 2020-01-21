@@ -1,5 +1,7 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
+from django.core.exceptions import ObjectDoesNotExist
+
 
 class IsStaffAndOwnerOrReadOnly(BasePermission):
     def has_permission(self, request, view):
@@ -37,3 +39,15 @@ class IsOwnerOrCreateOnly(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return request.method == 'POST' or obj.user == request.user
+
+
+class CarrinhoPermission(BasePermission):
+
+    def has_object_permission(self, request, view, obj):
+        try:
+            if request.user and request.user.is_authenticated:
+                return obj.cliente.user == request.user
+            else:
+                return False
+        except ObjectDoesNotExist:
+            return True
