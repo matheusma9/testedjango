@@ -7,3 +7,6 @@ Untrack files already added to git repository based on .gitignore
 	git rm -r --cached .
 	git add .
 	git commit -m ".gitignore fix"
+
+Remover error do requirements.txt
+pip freeze | grep -v "pkg-resources" > requirements.txt

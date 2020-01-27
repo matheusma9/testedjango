@@ -1,34 +1,34 @@
 # Rest Framework
-from rest_framework import viewsets, generics, mixins, filters, status
-from rest_framework.views import APIView
+from rest_framework import viewsets, mixins, filters, status
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 # Django
-from django.http import Http404
 from django.db.models import F, Count
 from django.utils import timezone
 from django.db.models.functions import Coalesce
-from django.utils.encoding import force_bytes, force_text
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.template.loader import render_to_string
-from django.core.mail import EmailMessage
-from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 
 
 # Website
 from .recommender import recommender_produtos
-from .permissions import IsStaffAndOwnerOrReadOnly, IsOwnerOrCreateOnly, IsStaff, CarrinhoPermission
+from .permissions import IsStaffAndOwnerOrReadOnly, IsStaff, CarrinhoPermission
 from .models import *
 from .serializers import *
-from .filters import *
-from .schema_view import CustomSchema
-from .shortcuts import get_object_or_404
-from .tokens import account_activation_token
-from .fields import get_fields
+
+# Accounts
+from accounts.models import Cliente
+from accounts.serializers import ClienteSerializer
+
+# Utils
+from utils.shortcuts import get_object_or_404
+from utils.fields import get_fields
+from utils.schemas import CustomSchema, Schema
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from django.utils.decorators import method_decorator
 
 
 def list_response(viewset, model_serializer, qs, request):
@@ -63,212 +63,6 @@ class EnderecoViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class ClienteViewSet(viewsets.ModelViewSet):
-    """
-
-    Endpoint relacionado aos clientes.
-
-    """
-    schema = CustomSchema()
-    serializer_class = ClienteSerializer
-    queryset = Cliente.objects.all()
-    permission_classes = (IsOwnerOrCreateOnly, )
-
-    @action(methods=['post'], detail=False)
-    def solicitar(self, request):
-        """
-        ---
-        method_path:
-         /clientes/solicitar/
-        method_action:
-         POST
-        desc:
-         Solicitar alteração de senha.
-        input:
-        - name: email
-          desc: Email do usuário.
-          type: str
-          required: True
-          location: form
-        """
-        to_email, *_ = get_fields(request.data, ['email'])
-        user = get_object_or_404(User, email=to_email)
-        mail_subject = 'Solicitação para alteração de senha.'
-        message = render_to_string('website/pass_reset.html', {
-            'user': user,
-            'domain': settings.FRONT_END_HOST,
-            'uid': urlsafe_base64_encode(force_bytes(user.pk)),
-            'token': account_activation_token.make_token(user),
-        })
-        email = EmailMessage(
-            mail_subject, message, to=[to_email]
-        )
-        email.send()
-        return Response({'message': 'A solicitação será enviada para o seu email.'})
-
-    @action(methods=['post'], detail=False)
-    def reset(self, request):
-        """
-        ---
-        method_path:
-         /clientes/reset/
-        method_action:
-         POST
-        desc:
-         Alterar senha.
-        input:
-        - name: uid
-          desc: Uid do usuário.
-          type: str
-          required: True
-          location: form
-        - name: token
-          desc: token do usuário.
-          type: str
-          required: True
-          location: form
-        - name: password
-          desc: Nova senha do usuário.
-          type: str
-          required: True
-          location: form
-        """
-        uidb64, token, password = get_fields(
-            request.data, ['uid', 'token', 'password'])
-        try:
-            uid = force_text(urlsafe_base64_decode(uidb64))
-            user = get_object_or_404(User, pk=uid)
-        except(TypeError, ValueError, OverflowError):
-            user = None
-        if user is not None and account_activation_token.check_token(user, token):
-            user.set_password(password)
-            user.save()
-            return Response({'message': 'Senha alterada com sucesso'})
-        return Response({'message': 'Token ou uid inválido'}, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(methods=['get', 'post'], detail=False)
-    def enderecos(self, request):
-        try:
-            if request.user.is_authenticated:
-                cliente = Cliente.objects.get(user=request.user)
-                if request.method == "GET":
-                    enderecos = cliente.enderecos.all()
-                    return list_response(self, EnderecoSerializer, enderecos, request)
-                if request.method == "POST":
-                    endereco_pk = request.data.get('endereco', None)
-                    if endereco_pk:
-                        endereco = Endereco.objects.get(pk=endereco_pk)
-                        cliente.enderecos.add(endereco)
-                        cliente.save()
-                        serializer = self.serializer_class(cliente)
-                        return Response(serializer.data)
-                    else:
-                        data = {'detail': 'O campo endereço é obrigatório'}
-                        return Response(data, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                raise NotAuthenticated
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['get'], detail=True)
-    def vendas(self, request, pk):
-        """
-        Obter vendas relacionadas a um determinado cliente.
-        """
-        try:
-            cliente = self.get_object()
-            return list_response(self, VendaSerializer, cliente.vendas.all(), request)
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['get'], detail=True)
-    def produtos(self, request, pk):
-        """
-        Obter produtos recomendados para um usuário.
-        """
-        try:
-            if not recommender_produtos.is_fitted:
-                recommender_produtos.fit()
-            produtosId = recommender_produtos.get_topk(int(pk))
-            produtos = Produto.objects.filter(id__in=produtosId)
-            return list_response(self, ProdutoSerializer, produtos, request)
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['get'], detail=True)
-    def avaliacoes(self, request, pk):
-        try:
-            cliente = self.get_object()
-            return list_response(self, AvaliacaoProdutoSerializer, cliente.avaliacoes_produto.all(), request)
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['post'], detail=False)
-    def oferta(self, request):
-        """
-        ---
-        method_path:
-         /clientes/oferta/
-        method_action:
-         POST
-        desc:
-         Adicionar oferta de produto no carrinho.
-        input:
-        - name: oferta
-          desc: Id da oferta.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Quantidade de itens que serão adicionados.
-          type: integer
-          required: True
-          location: form
-        """
-        try:
-            if request.user.is_authenticated:
-                error = False
-                messages = []
-                cliente = self.get_queryset().get(user=request.user)
-                print(cliente)
-                oferta = Oferta.objects.filter(validade__gte=timezone.now()).get(
-                    pk=request.data['oferta'])
-                print(oferta)
-                created = False
-                if not cliente.carrinho:
-                    created = True
-                    cliente.carrinho = Carrinho.objects.create()
-                    cliente.save()
-                produto = oferta.produto
-                quantidade = request.data['quantidade']
-                if created:
-                    quantidade, error, messages = produto.validar_qtd(
-                        quantidade, error, messages)
-                    if quantidade:
-                        cliente.carrinho.itens_carrinho.create(produto=produto, carrinho=cliente.carrinho,
-                                                               valor=oferta.valor, quantidade=quantidade)
-                        cliente.carrinho.save()
-                else:
-                    item, c = cliente.carrinho.itens_carrinho.get_or_create(
-                        produto=produto, carrinho=cliente.carrinho)
-                    item.quantidade, error, messages = produto.validar_qtd(
-                        ((item.quantidade or 0) + quantidade), error, messages)
-                    if item.quantidade:
-                        item.save()
-                    else:
-                        item.delete()
-                cliente.carrinho.atualizar_valor()
-                serializer = CarrinhoSerializer(cliente.carrinho)
-                data = serializer.data
-                data['messages'] = messages
-                data['error'] = error
-                return Response(data)
-            else:
-                raise NotAuthenticated()
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-
 class ProdutoViewSet(mixins.CreateModelMixin,
                      mixins.UpdateModelMixin,
                      viewsets.GenericViewSet):
@@ -278,26 +72,20 @@ class ProdutoViewSet(mixins.CreateModelMixin,
     Endpoint relacionado aos produtos.
 
     """
-    schema = CustomSchema()
     serializer_class = ProdutoSerializer
     queryset = Produto.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
     search_fields = ['descricao']
     filter_backends = (filters.SearchFilter,)
 
-    def list(self, request, *args, **kwargs):
-        """
-        ---
-        desc:
-         Listar produtos.
-        input:
-        - name: tags
-          desc: Categorias dos produtos(separadas por virgulas).
-          type: string
-          required: false
-          location: query
-        """
+    # @swagger_auto_schema(operation_description="")
+    tags = openapi.Parameter(name='tags',
+                             in_=openapi.IN_QUERY,
+                             type=openapi.TYPE_STRING,
+                             description='Categorias dos produtos(separadas por virgulas)')
 
+    @swagger_auto_schema(manual_parameters=[tags])
+    def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         slugs = request.query_params.get('tags', None)
         if slugs:
@@ -396,28 +184,21 @@ class VendaViewSet(mixins.CreateModelMixin,
     """
     Endpoint relacionado as vendas.
     """
-    schema = CustomSchema()
     serializer_class = VendaSerializer
     queryset = Venda.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
+    data_inicial = openapi.Parameter(name='inicio',
+                                     in_=openapi.IN_QUERY,
+                                     type=openapi.TYPE_STRING,
+                                     description='Data inicial')
+    data_fim = openapi.Parameter(name='fim',
+                                 in_=openapi.IN_QUERY,
+                                 type=openapi.TYPE_STRING,
+                                 description='Data fim')
+
+    @swagger_auto_schema(manual_parameters=[data_inicial, data_fim])
     def list(self, request, *args, **kwargs):
-        """
-        ---
-        desc:
-         Listar vendas.
-        input:
-        - name: inicio
-          desc: Data inicial.
-          type: string
-          required: false
-          location: query
-        - name: fim
-          desc: Data fim.
-          type: string
-          required: false
-          location: query
-        """
         inicio = request.query_params.get('inicio', None)
         fim = request.query_params.get('fim', None)
         qs = self.get_queryset()
@@ -449,33 +230,17 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     permission_classes = (IsStaff,)
     schema = CustomSchema()
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+    quantidade_parameter = openapi.Parameter(name='quantidade',
+                                             in_=openapi.IN_QUERY,
+                                             type=openapi.TYPE_INTEGER,
+                                             description='Número de categorias listadas')
 
+    @swagger_auto_schema(mathod='get', manual_parameters=[quantidade_parameter])
     @action(methods=['get'], detail=False)
     def acessos(self, request, *args, **kwargs):
-        """
-        ---
-        method_path:
-         /categorias/acessos/
-        method_action:
-         GET
-        desc:
-         Categorias mais acessadas.
-        input:
-        - name: quantidade
-          desc: Número de categorias listadas.
-          type: integer
-          required: False
-          location: query 
-
-        """
         n = int(request.query_params.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
-        serializer = self.get_serializer(qs, many=True)
-        return Response(serializer.data)
+        return list_response(self, self.get_serializer, qs, request)
 
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
@@ -502,81 +267,23 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
     @action(methods=['get'], detail=True,  url_path='info', url_name='info')
     def info(self, request, pk, *args, **kwargs):
-        """
-        ---
-        method_path:
-         /categorias/{id}/info/
-        method_action:
-         GET
-        desc:
-         Informação de uma categoria.
-        """
         c = self.get_object()
         data = self.serializer_class(c).data
         data['receita'] = c.receita
         data['n_vendas'] = c.vendas
         return Response(data)
 
+    @swagger_auto_schema(mathod='get', manual_parameters=[quantidade_parameter])
     @action(methods=['get'], detail=False)
     def compras(self, request, *args, **kwargs):
-        """
-        ---
-        method_path:
-         /categorias/compras/
-        method_action:
-         GET
-        desc:
-         Categorias mais compradas.
-        input:
-        - name: quantidade
-          desc: Número de categorias listadas.
-          type: integer
-          required: False
-          location: query
-        - name: page
-          desc: Número da página.
-          type: integer
-          required: False
-          location: query 
-        - name: limit
-          desc: Quantidade de itens por páginas.
-          type: integer
-          required: False
-          location: query 
-        """
         n = int(request.query_params.get('quantidade', 20))
         top_categorias = self.get_queryset().annotate(n_vendas=Count('produtos__itens_vendas')
                                                       ).values('nome', 'slug', 'qtd_acessos', 'n_vendas').order_by('-n_vendas')
-        return Response(top_categorias[:n])
+        return list_response(self, self.get_serializer, top_categorias[:n], request)
 
+    @swagger_auto_schema(mathod='get', manual_parameters=[quantidade_parameter])
     @action(methods=['get'], detail=False)
     def receita(self, request, *args, **kwargs):
-        """
-        ---
-        method_path:
-         /categorias/receita/
-        method_action:
-         GET
-        desc:
-         Categorias que geraram uma maior receita.
-        input:
-        - name: quantidade
-          desc: Número de categorias listadas.
-          type: integer
-          required: False
-          location: query
-        - name: page
-          desc: Número da página.
-          type: integer
-          required: False
-          location: query 
-        - name: limit
-          desc: Quantidade de itens por páginas.
-          type: integer
-          required: False
-          location: query 
-        """
-
         n = int(request.query_params.get('quantidade', 20))
         expression = models.ExpressionWrapper(F('produtos__itens_vendas__valor')*F('produtos__itens_vendas__quantidade'), output_field=models.DecimalField(
             max_digits=10, decimal_places=2, default=Decimal('0.00')))
@@ -613,7 +320,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
     """
     Endpoint relacionado aos carrinhos.
     """
-    schema = CustomSchema()
     serializer_class = CarrinhoSerializer
     queryset = Carrinho.objects.all()
     permission_classes = [CarrinhoPermission]
@@ -632,34 +338,13 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
         produto = get_object_or_404(Produto, pk=item)
         carrinho, error, messages = carrinho.adicionar_item(
             produto, quantidade, error, messages)
-        # carrinho.atualizar_valor()
         return carrinho, error, messages
 
+    @swagger_auto_schema(method='post', request_body=ItemCarrinhoSerializer)
     @action(methods=['post'], detail=False, url_path='itens')
     def first_itens(self, request):
-        """
-        ---
-        method_path:
-         /carrinhos/itens/
-        method_action:
-         POST
-        desc:
-         Adicionar produto no carrinho pela primeira vez.
-        input:
-        - name: produto
-          desc: Id do produto que vai ser adicionado.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Quantidade de itens que serão adicionados.
-          type: integer
-          required: True
-          location: form
-          elements:
-            produto: integer
-            quantidade: integer
-        """
+        produto, quantidade = get_fields(
+            request.data, ['produto', 'quantidade'])
         carrinho, error, messages = self.adicionar_item(
             request, request.data['produto'], request.data['quantidade'])
         serializer = self.get_serializer(carrinho)
@@ -668,47 +353,30 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
         data['error'] = error
         return Response(data)
 
+    response_carrinho = openapi.Schema(
+        title='Carrinho',
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'valor_total': openapi.Schema(type=openapi.TYPE_NUMBER),
+            'itens': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(
+                title='ItemCarrinho',
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'valor': openapi.Schema(type=openapi.TYPE_NUMBER),
+                    'quantidade': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
+                }
+            )),
+            'error': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+            'messages': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_STRING))
+
+        }
+    )
+    @swagger_auto_schema(methods=['post', 'patch'], request_body=ItemCarrinhoSerializer, responses={201: response_carrinho})
     @action(methods=['post', 'patch'], detail=True)
     def itens(self, request, pk):
-        """
-        ---
-        method_path:
-         /carrinhos/{id}/itens/
-        method_action:
-         POST
-        desc:
-         Adicionar produto no carrinho.
-        input:
-        - name: produto
-          desc: Id do produto que vai ser adicionado.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Quantidade de itens que serão adicionados.
-          type: integer
-          required: True
-          location: form
-          elements:
-            produto: integer
-            quantidade: integer
-        ---
-        method_action:
-         PATCH
-        desc:
-         Editar produto do carrinho.
-        input:
-        - name: produto
-          desc: Id do produto que vai ser alterado.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Nova quantidade de itens.
-          type: integer
-          required: True
-          location: form
-        """
         if request.method == 'POST':
             carrinho, error, messages = self.adicionar_item(
                 request, request.data['produto'], request.data['quantidade'], int(pk))
@@ -724,7 +392,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
                 ItemCarrinho, carrinho=carrinho, produto=produto)
             item.quantidade = quantidade
             item.save()
-            # carrinho.atualizar_valor()
 
         serializer = self.get_serializer(carrinho)
         data = serializer.data
@@ -734,21 +401,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
 
     @action(methods=['delete'], detail=True, url_path='itens/(?P<produto_id>[^/.]+)')
     def remover_item(self, request, pk, produto_id):
-        """
-        ---
-        method_path:
-         /carrinhos/{id}/itens/{produto_id}/
-        method_action:
-         DELETE
-        desc:
-         Remover produto do carrinho.
-        input:
-        - name: produto_id
-          desc: Id do produto que vai ser removido.
-          type: integer
-          required: True
-          location: path
-        """
         carrinho = self.get_object()
         error = False
         messages = []
@@ -757,35 +409,21 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
         item = get_object_or_404(
             ItemCarrinho, carrinho=carrinho, produto=produto)
         item.delete()
-        # carrinho.atualizar_valor()
         serializer = CarrinhoSerializer(carrinho)
         data = serializer.data
         data['messages'] = messages
         data['error'] = error
         return Response(data)
 
+    compra_response = openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'endereco': openapi.Schema(type=openapi.TYPE_INTEGER)
+        })
+
+    @swagger_auto_schema(method='post', request_body=compra_response, responses={200: VendaSerializer})
     @action(methods=['post'], detail=True)
     def compra(self, request, pk):
-        """
-        ---
-        method_path:
-         /carrinhos/{id}/compra/
-        method_action:
-         POST
-        desc:
-         Comprar produtos do carrinho.
-        input:
-        - name: itens
-          desc: Lista de itens(produto, quantidade) que serão comprados.
-          type: array
-          required: False
-          location: form
-        - name: endereco
-          desc: Id do Endereco de entrega
-          type: integer
-          required: True
-          location: form
-        """
         if request.user.is_authenticated:
             messages = []
             error = []
@@ -794,7 +432,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
             endereco_pk, *_ = get_fields(request.data, ['endereco'])
             endereco = cliente.enderecos.get(pk=endereco_pk)
             if cliente.carrinho.itens_carrinho.count():
-                # cliente.carrinho.atualizar_valor()
                 venda = cliente.carrinho.to_venda()
                 venda.endereco_entrega = endereco
                 venda.save()

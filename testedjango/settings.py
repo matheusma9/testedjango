@@ -46,15 +46,19 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'base',
-    'website',
+
+    # Externals
     'rest_framework',
-    'rest_framework_swagger',
+    'drf_yasg',
     'corsheaders',
-    'taggit',
-    'taggit_serializer',
     'debug_toolbar',
     'django_filters',
+
+    # App
+    'website',
+    'accounts',
+    'utils',
+
 ]
 
 MIDDLEWARE = [
@@ -123,8 +127,7 @@ REST_FRAMEWORK = {
     #    'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     # ),
     'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-        'rest_framework_xml.parsers.XMLParser',
+        'rest_framework.parsers.JSONParser'
     ],
 
     # 'DEFAULT_RENDERER_CLASSES': [
@@ -140,7 +143,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'website.pagination.WebsitePagination',
+    'DEFAULT_PAGINATION_CLASS': 'utils.pagination.WebsitePagination',
     'PAGE_SIZE': 3,
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }

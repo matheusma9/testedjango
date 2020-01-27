@@ -1,5 +1,6 @@
 import pandas as pd
-from website.models import AvaliacaoProduto, Produto, Cliente
+from website.models import AvaliacaoProduto, Produto
+from accounts.models import Cliente
 import numpy as np
 
 
@@ -40,23 +41,6 @@ class Recommender:
 
     def get_topk(self, userId, k=5):
         return np.argsort(self.pred[userId-1, :])[:-k-1:-1] + 1
-
-
-class RecommenderLoja(Recommender):
-
-    def load_rating(self):
-        qs = AvaliacaoLoja.objects.all().values_list('cliente_id', 'loja_id', 'rating')
-        return pd.DataFrame(
-            qs, columns=['cliente_id', 'loja_id', 'rating'])
-
-    def create_ratings_u_i(self, df_ratings):
-        n_users = Cliente.objects.count()
-        n_items = Loja.objects.count()
-        ratings = np.zeros((n_users, n_items))
-
-        for row in df_ratings.itertuples():
-            ratings[row[1]-1, row[2]-1] = row[3]
-        return ratings
 
 
 class RecommenderProduto(Recommender):

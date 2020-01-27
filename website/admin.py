@@ -24,7 +24,6 @@ class VendaAdmin(admin.ModelAdmin):
 
 
 # Register your models here.
-admin.site.register(Cliente)
 admin.site.register(Produto)
 admin.site.register(Venda, VendaAdmin)
 admin.site.register(ItemVenda)

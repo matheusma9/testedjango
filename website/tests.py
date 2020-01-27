@@ -11,6 +11,7 @@ from rest_framework_jwt.settings import api_settings
 # Create your tests here.
 
 
+'''
 class AccountTests(APITestCase):
 
     def setUp(self):
@@ -31,7 +32,7 @@ class AccountTests(APITestCase):
         endereco = {
             'bairro': 'a',
             'rua': 'a',
-            'numero_casa': 'wre',
+            'numero_casa': 10,
             'complemento': 'qewqq',
             'cep': '42346-234',
             'cidade': 'Salvador',
@@ -39,7 +40,7 @@ class AccountTests(APITestCase):
         }
         user = {'username': 'usertest',
                 'email': 'usertest@test.com',
-                'password': 'senha123'}
+                'password': '@CASDfjednms3'}
         data = {'nome': 'Teste',
                 'sobrenome': 'Teste',
                 'cpf': 5514916,
@@ -47,10 +48,9 @@ class AccountTests(APITestCase):
                 'data_nascimento': '23/06/1912',
                 'sexo': 'M',
                 'user': user,
-                'enderecos': [],
+                'enderecos': [endereco],
                 'foto': None}
         response = self.client.post(url, data, format='json')
-        print(response.data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Cliente.objects.count(), 2)
         self.assertEqual(Cliente.objects.get(nome='Teste').nome, 'Teste')
@@ -341,3 +341,4 @@ class OfertaTests(APITestCase):
         response = self.client.delete(
             url, data={'valor': '11.00'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+'''

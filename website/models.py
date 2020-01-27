@@ -4,8 +4,9 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from django.contrib.auth.models import User
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 
+from utils.models import ModelLog
 
 from rest_framework import serializers
 from decimal import Decimal
@@ -13,15 +14,7 @@ from slugify import slugify
 # Create your models here.
 
 
-class ModelDate(models.Model):
-    created_at = models.DateTimeField('Criado em', auto_now_add=True)
-    update_at = models.DateTimeField('Atualizado em', auto_now=True)
-
-    class Meta:
-        abstract = True
-
-
-class Endereco(ModelDate):
+class Endereco(ModelLog):
     UF = (('AC', 'Acre'),
           ('AL', 'Alagoas'),
           ('AP', 'Amapá'),
@@ -56,7 +49,8 @@ class Endereco(ModelDate):
     numero_casa = models.PositiveIntegerField('Número')
     complemento = models.CharField(
         'Complemento', max_length=50, blank=True, null=True)
-    cep = models.CharField('CEP', max_length=10)
+    cep = models.CharField('CEP', max_length=10, validators=[
+                           RegexValidator(regex=r'^\d{5}\-\d{3}$')])
     cidade = models.CharField('Cidade', max_length=120)
     uf = models.CharField('UF', max_length=2, choices=UF, default='AC')
 
@@ -69,7 +63,7 @@ class Endereco(ModelDate):
         ordering = ['cep']
 
 
-class Categoria(ModelDate):
+class Categoria(ModelLog):
     nome = models.CharField('Nome', max_length=50)
     slug = models.SlugField(unique=True)
     qtd_acessos = models.PositiveIntegerField(
@@ -98,7 +92,7 @@ class Categoria(ModelDate):
             Sum('n_vendas'))['n_vendas__sum'] or 0
 
 
-class Produto(ModelDate):
+class Produto(ModelLog):
     descricao = models.CharField('Descrição', max_length=100)
     valor = models.DecimalField('Valor', max_digits=10, decimal_places=2)
     qtd_estoque = models.PositiveIntegerField('Quantidade em estoque')
@@ -111,17 +105,7 @@ class Produto(ModelDate):
     categorias = models.ManyToManyField(
         'website.Categoria', related_name='produtos')
     avaliacoes = models.ManyToManyField(
-        'website.Cliente', through='AvaliacaoProduto')
-    '''
-    @property
-    def valor_atual(self):
-        queryset = Oferta.objects.filter(
-            validade__gte=timezone.now(), produto=self)
-        if queryset.exists():
-            return queryset[0].valor
-        else:
-            return self.valor
-    '''
+        'accounts.Cliente', through='AvaliacaoProduto')
 
     @property
     def rating(self):
@@ -162,7 +146,7 @@ class Produto(ModelDate):
         ordering = ['descricao']
 
 
-class Carrinho(ModelDate):
+class Carrinho(ModelLog):
     itens = models.ManyToManyField('website.Produto', through='ItemCarrinho')
     valor_total = models.DecimalField(
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
@@ -247,7 +231,7 @@ class Carrinho(ModelDate):
         return str(self.pk) + ' - ' + str(self.valor_total)
 
 
-class ItemCarrinho(ModelDate):
+class ItemCarrinho(ModelLog):
     carrinho = models.ForeignKey(
         'website.Carrinho', on_delete=models.CASCADE, related_name='itens_carrinho')
     produto = models.ForeignKey(
@@ -275,47 +259,11 @@ class ItemCarrinho(ModelDate):
         unique_together = [('carrinho', 'produto')]
 
 
-class Cliente(ModelDate):
-    SEXO = (('M', 'Masculino'), ('F', 'Feminino'))
-
-    nome = models.CharField('Nome', max_length=50)
-    foto = models.ImageField(
-        upload_to='website/images/profile', verbose_name='Foto',
-        null=True, blank=True)
-    sobrenome = models.CharField('Sobrenome', max_length=150)
-    cpf = models.IntegerField('CPF', unique=True)
-    rg = models.IntegerField('RG', unique=True, blank=True, null=True)
-    data_nascimento = models.DateField(
-        'Data de Nascimento', blank=True, null=True)
-    sexo = models.CharField('Sexo', max_length=1, choices=SEXO, default='M')
-    enderecos = models.ManyToManyField(
-        Endereco, related_name='clientes')
-    user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name='cliente')
-    carrinho = models.OneToOneField(
-        'website.Carrinho', on_delete=models.CASCADE, null=True, blank=True
-    )
-
-    @property
-    def idade(self):
-        now = timezone.now()
-        idade = (timezone.now().date() - self.data_nascimento).days//365
-        return idade
-
-    def __str__(self):
-        return self.nome + ' ' + self.sobrenome
-
-    class Meta:
-        verbose_name = 'Cliente'
-        verbose_name_plural = 'Clientes'
-        ordering = ['nome']
-
-
-class Venda(ModelDate):
+class Venda(ModelLog):
     produtos = models.ManyToManyField(
         'website.Produto', through='ItemVenda', related_name='vendas')
     cliente = models.ForeignKey(
-        'website.Cliente', on_delete=models.CASCADE, verbose_name='Cliente', related_name='vendas')
+        'accounts.Cliente', on_delete=models.CASCADE, verbose_name='Cliente', related_name='vendas')
     valor_total = models.DecimalField(
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
     endereco_entrega = models.ForeignKey(
@@ -337,7 +285,7 @@ class Venda(ModelDate):
         ordering = ['-update_at']
 
 
-class ItemVenda(ModelDate):
+class ItemVenda(ModelLog):
     venda = models.ForeignKey(
         'website.Venda', on_delete=models.CASCADE, related_name='itens')
     produto = models.ForeignKey(
@@ -354,9 +302,9 @@ class ItemVenda(ModelDate):
         ordering = ['-update_at']
 
 
-class AvaliacaoProduto(ModelDate):
+class AvaliacaoProduto(ModelLog):
     cliente = models.ForeignKey(
-        'website.Cliente', on_delete=models.CASCADE, related_name="avaliacoes_produto")
+        'accounts.Cliente', on_delete=models.CASCADE, related_name="avaliacoes_produto")
     produto = models.ForeignKey(
         'website.Produto', on_delete=models.CASCADE, related_name="avaliacoes_produto")
     rating = models.IntegerField('Rating', default=1, validators=[
@@ -374,7 +322,7 @@ class AvaliacaoProduto(ModelDate):
         verbose_name_plural = 'Avaliações dos Produtos'
 
 
-class Oferta(ModelDate):
+class Oferta(ModelLog):
 
     owner = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='ofertas')
@@ -386,7 +334,7 @@ class Oferta(ModelDate):
     produto = models.ForeignKey(
         'website.Produto', on_delete=models.CASCADE, related_name='ofertas')
     validade = models.DateTimeField('Validade')
-    is_banner = models.BooleanField("É banner?")
+    is_banner = models.BooleanField('É banner?')
 
     def __str__(self):
         return str(self.produto) + ' - ' + str(self.valor) + ' - ' + str(self.validade)
@@ -395,7 +343,7 @@ class Oferta(ModelDate):
         ordering = ['-validade']
 
 
-class ImagemProduto(ModelDate):
+class ImagemProduto(ModelLog):
     produto = models.ForeignKey(
         'website.Produto', on_delete=models.CASCADE, related_name='imagens')
     imagem = models.ImageField(
@@ -409,47 +357,3 @@ class ImagemProduto(ModelDate):
     class Meta:
         verbose_name = 'Imagem do Produtos'
         verbose_name_plural = 'Imagens dos Produtos'
-
-
-'''
-
-@receiver(post_save, sender=Oferta)
-def update_valor_oferta(sender, instance, **kwargs):
-    if instance.validade > timezone.now():
-        instance.produto.itens_carrinhos.update(valor=instance.valor)
-
-
-@receiver(post_delete, sender=Oferta)
-def update_valor_oferta(sender, instance, **kwargs):
-    valor = Decimal('0.00')
-    queryset = Oferta.objects.filter(
-        validade__gte=timezone.now(), produto=instance.produto).exclude(pk=instance.pk)
-    if queryset.exists():
-        valor = queryset[0].valor
-    else:
-        valor = instance.produto.valor
-    instance.produto.itens_carrinhos.update(valor=valor)
-
-
-@receiver([post_save], sender=Produto)
-def update_valor_produto(sender, instance, *args, **kwargs):
-    valor = Decimal('0.00')
-    queryset = Oferta.objects.filter(
-        validade__gte=timezone.now(), produto=instance)
-    if queryset.exists():
-        valor = queryset[0].valor
-    else:
-        valor = instance.valor
-    instance.itens_carrinhos.update(valor=valor)
-
-
-from website.models import *
-p = Produto.objects.get(descricao='Coca-cola')
-c2 = Carrinho.objects.create()
-ItemCarrinho.objects.create(carrinho=c2, quantidade=4, produto=p)
-c1 = Carrinho.objects.create()
-ItemCarrinho.objects.create(carrinho=c1, quantidade=4, produto=p)
-c2.associar(c1)
-c2.delete()
-
-'''
