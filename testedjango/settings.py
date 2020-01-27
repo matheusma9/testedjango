@@ -146,6 +146,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'utils.pagination.WebsitePagination',
     'PAGE_SIZE': 3,
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    'COERCE_DECIMAL_TO_STRING': False,
 }
 JWT_AUTH = {
     'JWT_ENCODE_HANDLER':
