@@ -26,6 +26,8 @@ from website.serializers import (EnderecoSerializer, AvaliacaoProdutoSerializer,
 from utils.shortcuts import get_object_or_404
 from utils.fields import get_fields
 from utils.schemas import CustomSchema
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -34,11 +36,11 @@ class ClienteViewSet(viewsets.ModelViewSet):
     Endpoint relacionado aos clientes.
 
     """
-    schema = CustomSchema()
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
     permission_classes = (IsOwnerOrCreateOnly, )
 
+    @swagger_auto_schema(method='post', request_body=openapi.Schema(type=openapi.TYPE_OBJECT, properties={'email': openapi.Schema(type=openapi.TYPE_STRING)}), responses={200: openapi.Schema(type=openapi.TYPE_STRING)})
     @action(methods=['post'], detail=False)
     def solicitar(self, request):
         """
@@ -71,33 +73,16 @@ class ClienteViewSet(viewsets.ModelViewSet):
         email.send()
         return Response({'message': 'A solicitação será enviada para o seu email.'})
 
+    reset_body = openapi.Schema(type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'uid': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'token': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'password': openapi.Schema(type=openapi.TYPE_STRING),
+                                })
+
+    @swagger_auto_schema(method='post', request_body=reset_body, responses={200: openapi.Schema(type=openapi.TYPE_STRING)})
     @action(methods=['post'], detail=False)
     def reset(self, request):
-        """
-        ---
-        method_path:
-         /clientes/reset/
-        method_action:
-         POST
-        desc:
-         Alterar senha.
-        input:
-        - name: uid
-          desc: Uid do usuário.
-          type: str
-          required: True
-          location: form
-        - name: token
-          desc: token do usuário.
-          type: str
-          required: True
-          location: form
-        - name: password
-          desc: Nova senha do usuário.
-          type: str
-          required: True
-          location: form
-        """
         uidb64, token, password = get_fields(
             request.data, ['uid', 'token', 'password'])
         try:
@@ -111,6 +96,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
             return Response({'message': 'Senha alterada com sucesso'})
         return Response({'message': 'Token ou uid inválido'}, status=status.HTTP_400_BAD_REQUEST)
 
+    @swagger_auto_schema(method='post', request_body=reset_body, responses={200: ClienteSerializer})
     @action(methods=['get', 'post'], detail=False)
     def enderecos(self, request):
         try:
