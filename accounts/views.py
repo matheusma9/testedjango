@@ -63,7 +63,9 @@ jwt_decode_handler = api_settings.JWT_DECODE_HANDLER
 
 
 class LoginView(ObtainJSONWebToken):
+
     schema = CustomSchema()
+
     login_request_schema = openapi.Schema(title='Login', type=openapi.TYPE_OBJECT, properties={
         'username': openapi.Schema(type=openapi.TYPE_STRING),
         'password': openapi.Schema(type=openapi.TYPE_STRING),
@@ -104,7 +106,6 @@ class LoginView(ObtainJSONWebToken):
           required: False
           location: form
         """
-
         req = request.data  # try and find email in request
         password = req.get('password')
         username = req.get('username')
