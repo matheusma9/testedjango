@@ -135,7 +135,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
         else:
             raise PermissionDenied
 
-    @action(methods=['post', 'delete'], detail=True)
+    @action(methods=['post'], detail=True)
     def imagens(self, request, pk, *args, **kwargs):
         if request.user.is_staff:
             produto = Produto.objects.get(pk=pk)
@@ -162,7 +162,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
                     qs = ImagemProduto.objects.filter(pk__in=data)
                     if not qs.filter(capa=True).exists():
                         qs.remove()
-                        nova_capa = ImagemProduto.objects.first()
+                        nova_capa = self.get_object().imagens.first()
                         nova_capa.capa = True
                         nova_capa.save()
                     else:
@@ -171,6 +171,23 @@ class ProdutoViewSet(mixins.CreateModelMixin,
                     data = {'detail': 'O campo imagens é obrigatório'}
                     return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
+            serializer = self.serializer_class(produto)
+            return Response(serializer.data)
+        else:
+            raise PermissionDenied
+
+    @action(methods=['delete'], detail=True, url_path='imagens/(?P<imagem_pk>[^/.]+)')
+    def remove_imagem(self, request, pk, imagem_pk):
+        if request.user.is_staff:
+            produto = Produto.objects.get(pk=pk)
+            qs = ImagemProduto.objects.filter(pk=imagem_pk)
+            if not qs.filter(capa=True).exists():
+                qs.remove()
+                nova_capa = self.get_object().imagens.first()
+                nova_capa.capa = True
+                nova_capa.save()
+            else:
+                qs.remove()
             serializer = self.serializer_class(produto)
             return Response(serializer.data)
         else:

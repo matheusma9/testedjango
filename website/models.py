@@ -99,9 +99,6 @@ class Produto(ModelLog):
     qtd_limite = models.PositiveIntegerField('Quantidade limite', default=100)
     descricao_completa = models.TextField(
         'Descrição Completa', blank=True, null=True)
-    logo = models.ImageField(
-        upload_to='website/images', verbose_name='Imagem',
-        null=True, blank=True)
     categorias = models.ManyToManyField(
         'website.Categoria', related_name='produtos')
     avaliacoes = models.ManyToManyField(

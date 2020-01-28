@@ -29,7 +29,7 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 #DEBUG = False
 ALLOWED_HOSTS = ['api-loja-django.herokuapp.com',
-                 '192.168.137.1', '127.0.0.1', '192.168.15.87', 'localhost']
+                 '192.168.137.1', '127.0.0.1', '192.168.15.87', '192.168.15.22', 'localhost']
 
 INTERNAL_IPS = [
     # ...

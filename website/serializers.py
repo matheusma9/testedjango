@@ -105,12 +105,11 @@ class ProdutoSerializer(serializers.ModelSerializer):
     categorias = CategoriaSerializer(many=True)
     imagens = ImagemProdutoSerializer(
         many=True, required=False)
-    logo = Base64ImageField()
 
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'valor', 'imagens',
-                  'logo', 'qtd_estoque', 'categorias', 'qtd_limite', 'rating']
+                  'qtd_estoque', 'categorias', 'qtd_limite', 'rating']
         read_only_fields = ['id', 'rating']
 
     def create(self, validated_data):
@@ -135,7 +134,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
         self.instance.descricao = validated_data.get(
             'descricao', self.instance.descricao)
         self.instance.valor = validated_data.get('valor', self.instance.valor)
-        self.instance.logo = validated_data.get('logo', self.instance.logo)
+
         self.instance.qtd_estoque = validated_data.get(
             'qtd_estoque', self.instance.qtd_estoque)
         self.instance.qtd_limite = validated_data.get(
