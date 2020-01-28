@@ -26,19 +26,11 @@ from accounts.serializers import ClienteSerializer
 from utils.shortcuts import get_object_or_404
 from utils.fields import get_fields
 from utils.schemas import CustomSchema, Schema
+from utils.viewsets import list_response, paginated_schema
+
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils.decorators import method_decorator
-
-
-def list_response(viewset, model_serializer, qs, request):
-    page = viewset.paginate_queryset(qs)
-    if page is not None:
-        serializer = model_serializer(
-            page, many=True, context={"request": request})
-        return viewset.get_paginated_response(serializer.data)
-    serializer = model_serializer(qs, many=True)
-    return Response(serializer.data)
 
 
 class EnderecoViewSet(viewsets.ModelViewSet):
@@ -50,17 +42,6 @@ class EnderecoViewSet(viewsets.ModelViewSet):
     serializer_class = EnderecoSerializer
     queryset = Endereco.objects.all()
     permission_classes = (IsAuthenticatedOrReadOnly,)
-
-    @action(methods=['get'], detail=True)
-    def clientes(self, request, pk):
-        """
-
-        Obter os clientes que possuem um determinado endereço.
-
-        """
-        endereco = self.get_object()
-        serializer = ClienteSerializer(endereco.clientes.all(), many=True)
-        return Response(serializer.data)
 
 
 class ProdutoViewSet(mixins.CreateModelMixin,
@@ -101,7 +82,14 @@ class ProdutoViewSet(mixins.CreateModelMixin,
         serializer = self.get_serializer(produto)
         return Response(serializer.data)
 
-    @action(methods=['post', 'delete'], detail=True)
+    categorias_body = openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'categorias': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_STRING))
+        })
+
+    @swagger_auto_schema(method='post', request_body=categorias_body, responses={201: ProdutoSerializer})
+    @action(methods=['post'], detail=True)
     def categorias(self, request, pk, *args, **kwargs):
         if request.user.is_staff:
             produto = Produto.objects.get(pk=pk)
@@ -115,62 +103,53 @@ class ProdutoViewSet(mixins.CreateModelMixin,
                             nome=categoria, slug=slug)
                         produto.categorias.add(c)
                     produto.save()
+                    serializer = self.get_serializer(produto)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
                 except KeyError:
                     data = {'detail': 'O campo categoria é obrigatório'}
                     return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-            if request.method == "DELETE":
-                try:
-                    data = request.data['categorias']
-                    for categoria in data:
-                        c = produto.categorias.get(slug=categoria)
-                        produto.categorias.remove(c)
-                    produto.save()
-                except KeyError:
-                    data = {'detail': 'O campo categoria é obrigatório'}
-                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
-
+    @action(methods=['delete'], detail=True, url_path='categorias/(?P<categoria_slug>[^/.]+)')
+    def remover_categoria(self, request, pk, categoria_slug):
+        if request.user.is_staff:
+            produto = self.get_object()
+            c = produto.categorias.get(slug=categoria_slug)
+            produto.categorias.remove(c)
+            produto.save()
             serializer = self.serializer_class(produto)
             return Response(serializer.data)
         else:
             raise PermissionDenied
 
+    imagens_body = openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'imagens': openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(type=openapi.TYPE_OBJECT, properties={
+                    'imagem': openapi.Schema(type=openapi.TYPE_STRING),
+                    'capa': openapi.Schema(type=openapi.TYPE_BOOLEAN)
+                }))
+        })
+
+    @swagger_auto_schema(method='post', request_body=imagens_body, responses={200: ProdutoSerializer})
     @action(methods=['post'], detail=True)
     def imagens(self, request, pk, *args, **kwargs):
         if request.user.is_staff:
             produto = Produto.objects.get(pk=pk)
+            try:
+                data = request.data['imagens']
 
-            if request.method == "POST":
-                try:
-                    data = request.data['imagens']
+                for imagem in data:
+                    imagem['produto'] = produto.pk
 
-                    for imagem in data:
-                        imagem['produto'] = produto.pk
-                        print(imagem)
-
-                    imgs_serializer = ImagemProdutoSerializer(
-                        data=data, many=True)
-                    imgs_serializer.is_valid(raise_exception=True)
-                    imgs_serializer.save()
-                except KeyError:
-                    data = {'detail': 'O campo imagens é obrigatório'}
-                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
-
-            if request.method == "DELETE":
-                try:
-                    data = request.data['imagens']
-                    qs = ImagemProduto.objects.filter(pk__in=data)
-                    if not qs.filter(capa=True).exists():
-                        qs.remove()
-                        nova_capa = self.get_object().imagens.first()
-                        nova_capa.capa = True
-                        nova_capa.save()
-                    else:
-                        qs.remove()
-                except KeyError:
-                    data = {'detail': 'O campo imagens é obrigatório'}
-                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
-
+                imgs_serializer = ImagemProdutoSerializer(
+                    data=data, many=True)
+                imgs_serializer.is_valid(raise_exception=True)
+                imgs_serializer.save()
+            except KeyError:
+                data = {'detail': 'O campo imagens é obrigatório'}
+                return Response(data, status=status.HTTP_400_BAD_REQUEST)
             serializer = self.serializer_class(produto)
             return Response(serializer.data)
         else:
@@ -182,12 +161,12 @@ class ProdutoViewSet(mixins.CreateModelMixin,
             produto = Produto.objects.get(pk=pk)
             qs = ImagemProduto.objects.filter(pk=imagem_pk)
             if not qs.filter(capa=True).exists():
-                qs.remove()
+                qs.delete()
                 nova_capa = self.get_object().imagens.first()
                 nova_capa.capa = True
                 nova_capa.save()
             else:
-                qs.remove()
+                qs.delete()
             serializer = self.serializer_class(produto)
             return Response(serializer.data)
         else:
@@ -252,24 +231,21 @@ class CategoriaViewSet(viewsets.ModelViewSet):
                                              type=openapi.TYPE_INTEGER,
                                              description='Número de categorias listadas')
 
-    @swagger_auto_schema(mathod='get', manual_parameters=[quantidade_parameter])
+    search_parameter = openapi.Parameter(name='search',
+                                         in_=openapi.IN_QUERY,
+                                         type=openapi.TYPE_STRING,
+                                         description='Termos para pesquisa')
+
+    @swagger_auto_schema(method='get', manual_parameters=[quantidade_parameter])
     @action(methods=['get'], detail=False)
     def acessos(self, request, *args, **kwargs):
         n = int(request.query_params.get('quantidade', 20))
         qs = self.queryset.order_by('-qtd_acessos')[:n]
         return list_response(self, self.get_serializer, qs, request)
 
+    @swagger_auto_schema(method='get', manual_parameters=[search_parameter])
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk, *args, **kwargs):
-        """
-        ---
-        method_path:
-         /categorias/{id}/produtos/
-        method_action:
-         GET
-        desc:
-         Produtos da categoria.
-        """
         search = request.query_params.get('search', None)
         categoria = self.get_object()
         categoria.qtd_acessos += 1
@@ -282,6 +258,20 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         serializer = ProdutoSerializer(qs, many=True)
         return list_response(self, ProdutoSerializer, qs, request)
 
+    info_response = openapi.Schema(
+        title='Categoria',
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'nome': openapi.Schema(type=openapi.TYPE_STRING),
+            'slug': openapi.Schema(type=openapi.TYPE_STRING),
+            'qtd_acessos': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'receita': openapi.Schema(type=openapi.TYPE_NUMBER),
+            'n_vendas': openapi.Schema(type=openapi.TYPE_INTEGER),
+        }
+    )
+
+    @swagger_auto_schema(method='get', responses={200: info_response})
     @action(methods=['get'], detail=True,  url_path='info', url_name='info')
     def info(self, request, pk, *args, **kwargs):
         c = self.get_object()
@@ -290,7 +280,18 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         data['n_vendas'] = c.vendas
         return Response(data)
 
-    @swagger_auto_schema(mathod='get', manual_parameters=[quantidade_parameter])
+    compras_response_schema = openapi.Schema(
+        title='Categoria',
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'nome': openapi.Schema(type=openapi.TYPE_STRING),
+            'slug': openapi.Schema(type=openapi.TYPE_STRING),
+            'qtd_acessos': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'n_vendas': openapi.Schema(type=openapi.TYPE_INTEGER),
+        }
+    )
+    @swagger_auto_schema(method='get', manual_parameters=[quantidade_parameter], responses={200: paginated_schema(compras_response_schema)})
     @action(methods=['get'], detail=False)
     def compras(self, request, *args, **kwargs):
         n = int(request.query_params.get('quantidade', 20))
@@ -298,7 +299,18 @@ class CategoriaViewSet(viewsets.ModelViewSet):
                                                       ).values('nome', 'slug', 'qtd_acessos', 'n_vendas').order_by('-n_vendas')
         return list_response(self, self.get_serializer, top_categorias[:n], request)
 
-    @swagger_auto_schema(mathod='get', manual_parameters=[quantidade_parameter])
+    receita_response_schema = openapi.Schema(
+        title='Categoria',
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'nome': openapi.Schema(type=openapi.TYPE_STRING),
+            'slug': openapi.Schema(type=openapi.TYPE_STRING),
+            'qtd_acessos': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'receita': openapi.Schema(type=openapi.TYPE_NUMBER)
+        }
+    )
+    @swagger_auto_schema(method='get', manual_parameters=[quantidade_parameter], responses={200: paginated_schema(receita_response_schema)})
     @action(methods=['get'], detail=False)
     def receita(self, request, *args, **kwargs):
         n = int(request.query_params.get('quantidade', 20))
@@ -357,19 +369,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
             produto, quantidade, error, messages)
         return carrinho, error, messages
 
-    @swagger_auto_schema(method='post', request_body=ItemCarrinhoSerializer)
-    @action(methods=['post'], detail=False, url_path='itens')
-    def first_itens(self, request):
-        produto, quantidade = get_fields(
-            request.data, ['produto', 'quantidade'])
-        carrinho, error, messages = self.adicionar_item(
-            request, request.data['produto'], request.data['quantidade'])
-        serializer = self.get_serializer(carrinho)
-        data = serializer.data
-        data['messages'] = messages
-        data['error'] = error
-        return Response(data)
-
     response_carrinho = openapi.Schema(
         title='Carrinho',
         type=openapi.TYPE_OBJECT,
@@ -391,12 +390,38 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
 
         }
     )
-    @swagger_auto_schema(methods=['post', 'patch'], request_body=ItemCarrinhoSerializer, responses={201: response_carrinho})
+    itens_patch_body = openapi.Schema(title='ItemCarrinho',
+                                      type=openapi.TYPE_OBJECT,
+                                      properties={
+                                          'quantidade': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                          'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                      })
+    itens_post_body = openapi.Schema(title='ItemCarrinho',
+                                     type=openapi.TYPE_OBJECT,
+                                     properties={
+                                         'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                     })
+
+    @swagger_auto_schema(method='post', request_body=itens_post_body, responses={201: response_carrinho})
+    @action(methods=['post'], detail=False, url_path='itens')
+    def first_itens(self, request):
+        produto, quantidade = get_fields(
+            request.data, ['produto', 'quantidade'])
+        carrinho, error, messages = self.adicionar_item(
+            request, request.data['produto'], request.data['quantidade'])
+        serializer = self.get_serializer(carrinho)
+        data = serializer.data
+        data['messages'] = messages
+        data['error'] = error
+        return Response(data)
+
+    @swagger_auto_schema(method='post', request_body=itens_post_body, responses={201: response_carrinho})
+    @swagger_auto_schema(method='patch', request_body=itens_patch_body, responses={201: response_carrinho})
     @action(methods=['post', 'patch'], detail=True)
     def itens(self, request, pk):
         if request.method == 'POST':
             carrinho, error, messages = self.adicionar_item(
-                request, request.data['produto'], request.data['quantidade'], int(pk))
+                request, request.data['produto'], 1, int(pk))
 
         elif request.method == 'PATCH':
             error, messages = False, []

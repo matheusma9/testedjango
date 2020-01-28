@@ -26,6 +26,8 @@ from website.serializers import (EnderecoSerializer, AvaliacaoProdutoSerializer,
 from utils.shortcuts import get_object_or_404
 from utils.fields import get_fields
 from utils.schemas import CustomSchema
+from utils.viewsets import list_response, paginated_schema
+
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 
@@ -97,30 +99,47 @@ class ClienteViewSet(viewsets.ModelViewSet):
         return Response({'message': 'Token ou uid inválido'}, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(method='post', request_body=reset_body, responses={200: ClienteSerializer})
-    @action(methods=['get', 'post'], detail=False)
+    @action(methods=['post'], detail=False)
     def enderecos(self, request):
         try:
             if request.user.is_authenticated:
                 cliente = Cliente.objects.get(user=request.user)
-                if request.method == "GET":
-                    enderecos = cliente.enderecos.all()
-                    return list_response(self, EnderecoSerializer, enderecos, request)
-                if request.method == "POST":
-                    endereco_pk = request.data.get('endereco', None)
-                    if endereco_pk:
-                        endereco = Endereco.objects.get(pk=endereco_pk)
-                        cliente.enderecos.add(endereco)
-                        cliente.save()
-                        serializer = self.serializer_class(cliente)
-                        return Response(serializer.data)
-                    else:
-                        data = {'detail': 'O campo endereço é obrigatório'}
-                        return Response(data, status=status.HTTP_400_BAD_REQUEST)
+                endereco_pk = request.data.get('endereco', None)
+                if endereco_pk:
+                    endereco = Endereco.objects.get(pk=endereco_pk)
+                    cliente.enderecos.add(endereco)
+                    cliente.save()
+                    serializer = self.serializer_class(cliente)
+                    return Response(serializer.data)
+                else:
+                    data = {'detail': 'O campo endereço é obrigatório'}
+                    return Response(data, status=status.HTTP_400_BAD_REQUEST)
             else:
                 raise NotAuthenticated
         except models.ObjectDoesNotExist:
             raise Http404
 
+    venda_schema = openapi.Schema(
+        title='Venda',
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'cliente': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'valor_total': openapi.Schema(type=openapi.TYPE_NUMBER),
+            'created_at': openapi.Schema(type=openapi.TYPE_STRING),
+            'endereco_entrega': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'itens': openapi.Schema(type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(type=openapi.TYPE_OBJECT,
+                                                         properties={
+                                                             'valor': openapi.Schema(type=openapi.TYPE_NUMBER),
+                                                             'quantidade': openapi.Schema(type=openapi.TYPE_STRING),
+                                                             'produto': openapi.Schema(type=openapi.TYPE_INTEGER)
+                                                         }
+                                                         )
+                                    )
+        }
+    )
+    @swagger_auto_schema(method='get', responses={200: paginated_schema(venda_schema)})
     @action(methods=['get'], detail=True)
     def vendas(self, request, pk):
         """
@@ -132,6 +151,28 @@ class ClienteViewSet(viewsets.ModelViewSet):
         except models.ObjectDoesNotExist:
             raise Http404
 
+    produto_schema = openapi.Schema(
+        title='Produto',
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'descricao': openapi.Schema(type=openapi.TYPE_STRING),
+            'valor': openapi.Schema(type=openapi.TYPE_NUMBER),
+            'imagens': openapi.Schema(type=openapi.TYPE_ARRAY,
+                                      items=openapi.Schema(type=openapi.TYPE_OBJECT,
+                                                           properties={
+                                                               'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                                               'imagem': openapi.Schema(type=openapi.TYPE_STRING),
+                                                               'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                                               'capa': openapi.Schema(type=openapi.TYPE_BOOLEAN)
+                                                           }
+                                                           )
+                                      ),
+            'qtd_acessos': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'n_vendas': openapi.Schema(type=openapi.TYPE_INTEGER),
+        }
+    )
+    @swagger_auto_schema(method='get', responses={200: paginated_schema(produto_schema)})
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk):
         """
@@ -146,73 +187,18 @@ class ClienteViewSet(viewsets.ModelViewSet):
         except models.ObjectDoesNotExist:
             raise Http404
 
+    avaliacao_schema = openapi.Schema(
+        title='AvaliacaoProduto', type=openapi.TYPE_OBJECT,
+        properties={
+            'cliente': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'rating': openapi.Schema(type=openapi.TYPE_NUMBER),
+            'comentario': openapi.Schema(type=openapi.TYPE_STRING)
+        }
+    )
+
+    @swagger_auto_schema(method='get', responses={200: paginated_schema(avaliacao_schema)})
     @action(methods=['get'], detail=True)
     def avaliacoes(self, request, pk):
-        try:
-            cliente = self.get_object()
-            return list_response(self, AvaliacaoProdutoSerializer, cliente.avaliacoes_produto.all(), request)
-        except models.ObjectDoesNotExist:
-            raise Http404
-
-    @action(methods=['post'], detail=False)
-    def oferta(self, request):
-        """
-        ---
-        method_path:
-         /clientes/oferta/
-        method_action:
-         POST
-        desc:
-         Adicionar oferta de produto no carrinho.
-        input:
-        - name: oferta
-          desc: Id da oferta.
-          type: integer
-          required: True
-          location: form
-        - name: quantidade
-          desc: Quantidade de itens que serão adicionados.
-          type: integer
-          required: True
-          location: form
-        """
-        try:
-            if request.user.is_authenticated:
-                error = False
-                messages = []
-                cliente = self.get_queryset().get(user=request.user)
-                oferta = Oferta.objects.filter(validade__gte=timezone.now()).get(
-                    pk=request.data['oferta'])
-                created = False
-                if not cliente.carrinho:
-                    created = True
-                    cliente.carrinho = Carrinho.objects.create()
-                    cliente.save()
-                produto = oferta.produto
-                quantidade = request.data['quantidade']
-                if created:
-                    quantidade, error, messages = produto.validar_qtd(
-                        quantidade, error, messages)
-                    if quantidade:
-                        cliente.carrinho.itens_carrinho.create(produto=produto, carrinho=cliente.carrinho,
-                                                               valor=oferta.valor, quantidade=quantidade)
-                        cliente.carrinho.save()
-                else:
-                    item, c = cliente.carrinho.itens_carrinho.get_or_create(
-                        produto=produto, carrinho=cliente.carrinho)
-                    item.quantidade, error, messages = produto.validar_qtd(
-                        ((item.quantidade or 0) + quantidade), error, messages)
-                    if item.quantidade:
-                        item.save()
-                    else:
-                        item.delete()
-                cliente.carrinho.atualizar_valor()
-                serializer = CarrinhoSerializer(cliente.carrinho)
-                data = serializer.data
-                data['messages'] = messages
-                data['error'] = error
-                return Response(data)
-            else:
-                raise NotAuthenticated()
-        except models.ObjectDoesNotExist:
-            raise Http404
+        cliente = self.get_object()
+        return list_response(self, AvaliacaoProdutoSerializer, cliente.avaliacoes_produto.all(), request)
