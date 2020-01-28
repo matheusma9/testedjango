@@ -12,6 +12,11 @@ class VendaProdutoInline(admin.TabularInline):
     extra = 3
 
 
+class ImagemProdutoInline(admin.TabularInline):
+    model = ImagemProduto
+    extra = 3
+
+
 class CarrinhoAdmin(admin.ModelAdmin):
     inlines = (ItemCarrinhoInline,)
 
@@ -23,8 +28,14 @@ class VendaAdmin(admin.ModelAdmin):
     )
 
 
+class ProdutoAdmin(admin.ModelAdmin):
+    inlines = (
+        ImagemProdutoInline,
+    )
+
+
 # Register your models here.
-admin.site.register(Produto)
+admin.site.register(Produto, ProdutoAdmin)
 admin.site.register(Venda, VendaAdmin)
 admin.site.register(ItemVenda)
 admin.site.register(Endereco)
