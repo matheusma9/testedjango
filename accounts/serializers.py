@@ -28,7 +28,6 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
         extra_kwargs = {
             'password': {'write_only': True},
-
         }
 
     def validate_password(self, value):

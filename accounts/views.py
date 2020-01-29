@@ -84,13 +84,13 @@ class LoginView(ObtainJSONWebToken):
             user = User.objects.get(username=username)
         except:
             return Response({'success': False,
-                             'message': 'User not found',
+                             'message': 'Usuário e/ou senha inválidos.',
                              'data': req},
                             status=status.HTTP_404_NOT_FOUND)
 
         if not user.check_password(password):
             return Response({'success': False,
-                             'message': 'Incorrect password',
+                             'message': 'Usuário e/ou senha inválidos.',
                              'data': req},
                             status=status.HTTP_403_FORBIDDEN)
 

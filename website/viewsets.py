@@ -31,6 +31,7 @@ from utils.viewsets import list_response, paginated_schema
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils.decorators import method_decorator
+from utils.inspectors import PageNumberPaginatorInspectorClass
 
 
 class EnderecoViewSet(viewsets.ModelViewSet):
@@ -65,7 +66,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
                              type=openapi.TYPE_STRING,
                              description='Categorias dos produtos(separadas por virgulas)')
 
-    @swagger_auto_schema(manual_parameters=[tags])
+    @swagger_auto_schema(manual_parameters=[tags], responses={200: ProdutoListSerializer}, paginator_inspectors=[PageNumberPaginatorInspectorClass])
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         slugs = request.query_params.get('tags', None)
@@ -74,7 +75,7 @@ class ProdutoViewSet(mixins.CreateModelMixin,
             categorias = Categoria.objects.filter(slug__in=slugs)
             categorias.update(qtd_acessos=F('qtd_acessos') + 1)
             queryset = queryset.filter(categorias__in=categorias).distinct()
-        return list_response(self, self.get_serializer, queryset, request)
+        return list_response(self, ProdutoListSerializer, queryset, request)
 
     def retrieve(self, request, *args, **kwargs):
         produto = self.get_object()
@@ -171,6 +172,34 @@ class ProdutoViewSet(mixins.CreateModelMixin,
             return Response(serializer.data)
         else:
             raise PermissionDenied
+
+
+class ProdutoListViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """
+
+    Endpoint relacionado aos produtos.
+
+    """
+    serializer_class = ProdutoListSerializer
+    queryset = Produto.objects.all()
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+    search_fields = ['descricao']
+    filter_backends = (filters.SearchFilter,)
+    tags = openapi.Parameter(name='tags',
+                             in_=openapi.IN_QUERY,
+                             type=openapi.TYPE_STRING,
+                             description='Categorias dos produtos(separadas por virgulas)')
+
+    @swagger_auto_schema(manual_parameters=[tags])
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        slugs = request.query_params.get('tags', None)
+        if slugs:
+            slugs = slugs.split(',')
+            categorias = Categoria.objects.filter(slug__in=slugs)
+            categorias.update(qtd_acessos=F('qtd_acessos') + 1)
+            queryset = queryset.filter(categorias__in=categorias).distinct()
+        return list_response(self, self.get_serializer, queryset, request)
 
 
 class VendaViewSet(mixins.CreateModelMixin,

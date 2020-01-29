@@ -105,6 +105,11 @@ class Produto(ModelLog):
         'accounts.Cliente', through='AvaliacaoProduto')
 
     @property
+    def capa(self):
+        imagem
+        return self.imagens.filter(capa=True).first()
+
+    @property
     def rating(self):
         return self.avaliacoes_produto.aggregate(rating=Avg('rating'))['rating'] or Decimal('0.00')
 

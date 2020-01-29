@@ -184,6 +184,12 @@ JWT_AUTH = {
 
 }
 
+SWAGGER_SETTINGS = {
+    "DEFAULT_PAGINATOR_INSPECTORS": [
+        'utils.inspectors.PageNumberPaginatorInspectorClass',
+    ]
+}
+
 # Internationalization
 # https://docs.djangoproject.com/en/2.2/topics/i18n/
 

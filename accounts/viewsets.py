@@ -12,7 +12,7 @@ from django.core.mail import EmailMessage
 from django.conf import settings
 
 # Accounts
-from .permissions import IsOwnerOrCreateOnly
+from .permissions import IsOwnerOrStaffOrCreateOnly
 from .tokens import account_activation_token
 from .models import Cliente
 from .serializers import ClienteSerializer
@@ -40,7 +40,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ClienteSerializer
     queryset = Cliente.objects.all()
-    permission_classes = (IsOwnerOrCreateOnly, )
+    permission_classes = (IsOwnerOrStaffOrCreateOnly, )
 
     @swagger_auto_schema(method='post', request_body=openapi.Schema(type=openapi.TYPE_OBJECT, properties={'email': openapi.Schema(type=openapi.TYPE_STRING)}), responses={200: openapi.Schema(type=openapi.TYPE_STRING)})
     @action(methods=['post'], detail=False)
@@ -103,9 +103,10 @@ class ClienteViewSet(viewsets.ModelViewSet):
     def enderecos(self, request):
         try:
             if request.user.is_authenticated:
-                cliente = Cliente.objects.get(user=request.user)
+                cliente = get_object_or_404(Cliente, user=request.user)
                 endereco_pk = request.data.get('endereco', None)
                 if endereco_pk:
+                    endereco = get_object_or_404(Endereco, pk=endereco_pk)
                     endereco = Endereco.objects.get(pk=endereco_pk)
                     cliente.enderecos.add(endereco)
                     cliente.save()
@@ -139,7 +140,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
                                     )
         }
     )
-    @swagger_auto_schema(method='get', responses={200: paginated_schema(venda_schema)})
+
     @action(methods=['get'], detail=True)
     def vendas(self, request, pk):
         """
@@ -172,7 +173,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
             'n_vendas': openapi.Schema(type=openapi.TYPE_INTEGER),
         }
     )
-    @swagger_auto_schema(method='get', responses={200: paginated_schema(produto_schema)})
+
     @action(methods=['get'], detail=True)
     def produtos(self, request, pk):
         """
@@ -197,7 +198,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
         }
     )
 
-    @swagger_auto_schema(method='get', responses={200: paginated_schema(avaliacao_schema)})
     @action(methods=['get'], detail=True)
     def avaliacoes(self, request, pk):
         cliente = self.get_object()
