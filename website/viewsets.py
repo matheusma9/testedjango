@@ -66,7 +66,13 @@ class ProdutoViewSet(mixins.CreateModelMixin,
                              type=openapi.TYPE_STRING,
                              description='Categorias dos produtos(separadas por virgulas)')
 
-    @swagger_auto_schema(manual_parameters=[tags], responses={200: ProdutoListSerializer}, paginator_inspectors=[PageNumberPaginatorInspectorClass])
+    produto_schema = openapi.Schema(title='Produto', type=openapi.TYPE_OBJECT, properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'descricao': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'capa': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'rating': openapi.Schema(type=openapi.TYPE_NUMBER)})
+
+    @swagger_auto_schema(manual_parameters=[tags], responses={200: paginated_schema(produto_schema)})
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         slugs = request.query_params.get('tags', None)
