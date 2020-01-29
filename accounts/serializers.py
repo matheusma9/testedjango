@@ -45,7 +45,7 @@ class ClienteSerializer(UpdateNestedMixin, serializers.ModelSerializer):
     class Meta:
         model = Cliente
         fields = ['user', 'foto', 'id', 'nome', 'sobrenome', 'cpf',
-                  'rg', 'data_nascimento', 'sexo', 'enderecos']
+                  'rg', 'data_nascimento', 'sexo', 'enderecos', 'carrinho']
         read_only_fields = ['id']
 
     def create(self, validated_data):

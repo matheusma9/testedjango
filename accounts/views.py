@@ -65,37 +65,13 @@ class LoginView(ObtainJSONWebToken):
     login_response_schema = openapi.Schema(type=openapi.TYPE_OBJECT, properties={
         'token': openapi.Schema(type=openapi.TYPE_STRING),
         'error': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+        'carrinho': openapi.Schema(type=openapi.TYPE_INTEGER),
         'messages': openapi.Schema(type=openapi.TYPE_ARRAY,
                                    items=openapi.Schema(type=openapi.TYPE_STRING))
     })
 
     @swagger_auto_schema(request_body=login_request_schema, responses={200: login_response_schema})
     def post(self, request, *args, **kwargs):
-        """
-        ---
-        method_path:
-         /login/
-        method_action:
-         POST
-        desc:
-         Logar no sistema.
-        input:
-        - name: username
-          desc: Username do usuário.
-          type: str
-          required: True
-          location: form
-        - name: password
-          desc: Senha do usuário.
-          type: str
-          required: True
-          location: form
-        - name: carrinho
-          desc: Id do carrinho que o usuário estava usando antes de logar.
-          type: integer
-          required: False
-          location: form
-        """
         req = request.data  # try and find email in request
         password = req.get('password')
         username = req.get('username')
@@ -139,5 +115,6 @@ class LoginView(ObtainJSONWebToken):
 
         return Response({'token': token,
                          'error': error,
-                         'messages': messages},
+                         'messages': messages,
+                         'carrinho': cliente.carrinho.pk},
                         status=status.HTTP_200_OK)
