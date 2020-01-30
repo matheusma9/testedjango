@@ -14,7 +14,7 @@ from website import viewsets as website_viewsets
 
 # Accounts
 from accounts import viewsets as accounts_viewsets
-from accounts.views import LoginView
+from accounts.views import AccTokenObtainView
 
 # Utils
 from utils.schemas import schema_view
@@ -33,8 +33,7 @@ router.register(r'carrinhos', website_viewsets.CarrinhoViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include(router.urls)),
-    path('login/', LoginView.as_view(), name='login'),
-    # path('refresh-token/', refresh_jwt_token),
+    path('login/', AccTokenObtainView.as_view(), name='login'),
     path('doc/', schema_view.with_ui('swagger', cache_timeout=0)),
 ]
 urlpatterns += static(settings.MEDIA_URL,

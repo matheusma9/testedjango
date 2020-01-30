@@ -107,10 +107,7 @@ class Produto(ModelLog):
     @property
     def capa(self):
         capa = self.imagens.filter(capa=True).first()
-        if capa:
-            return capa.imagem
-        else:
-            return None
+        return capa or capa.imagem
 
     @property
     def rating(self):
@@ -168,6 +165,15 @@ class Carrinho(ModelLog):
                 other.delete()
         else:
             raise TypeError("O objeto 'other' deve ser do tipo Carrinho")
+        return error, messages
+
+    def associar_itens(self, itens):
+        error = False
+        messages = []
+        for item in itens:
+            item_carrinho, error, messages = self.adicionar_item(
+                item['produto'], item['quantidade'], error, messages)
+        self.atualizar_valor()
         return error, messages
 
     def adicionar_item(self, produto, quantidade, error, messages):

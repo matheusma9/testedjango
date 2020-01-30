@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAdminUser
@@ -22,99 +23,85 @@ from drf_yasg import openapi
 from datetime import datetime
 import uuid
 from calendar import timegm
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from django.utils.decorators import method_decorator
+from website.serializers import CarrinhoSerializer
+from website.models import Carrinho
+
+
 # Create your views here.
 
+class UserLoginSerializer(TokenObtainPairSerializer):
+    carrinho = CarrinhoSerializer()
 
-def jwt_payload_handler(cliente):
-    username = cliente.user.username
-
-    payload = {
-        'user_id': cliente.user.pk,
-        'username': username,
-        'cliente': cliente.pk,
-        'is_staff': cliente.user.is_staff,
-        'exp': datetime.utcnow() + api_settings.JWT_EXPIRATION_DELTA
-    }
-    if hasattr(cliente.user, 'email'):
-        payload['email'] = cliente.user.email
-    if isinstance(cliente.user.pk, uuid.UUID):
-        payload['user_id'] = str(cliente.user.pk)
-
-    payload['username'] = username
-
-    # Include original issued at time for a brand new token,
-    # to allow token refresh
-    return payload
-
-
-#jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
-jwt_decode_handler = api_settings.JWT_DECODE_HANDLER
-
-
-class LoginView(ObtainJSONWebToken):
-
-    schema = CustomSchema()
-
-    login_request_schema = openapi.Schema(title='Login', type=openapi.TYPE_OBJECT, properties={
-        'username': openapi.Schema(type=openapi.TYPE_STRING),
-        'password': openapi.Schema(type=openapi.TYPE_STRING),
-        'carrinho': openapi.Schema(type=openapi.TYPE_INTEGER),
-    },
-        required=['username', 'password'])
-    login_response_schema = openapi.Schema(type=openapi.TYPE_OBJECT, properties={
-        'token': openapi.Schema(type=openapi.TYPE_STRING),
-        'error': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-        'carrinho': openapi.Schema(type=openapi.TYPE_INTEGER),
-        'messages': openapi.Schema(type=openapi.TYPE_ARRAY,
-                                   items=openapi.Schema(type=openapi.TYPE_STRING))
-    })
-
-    @swagger_auto_schema(request_body=login_request_schema, responses={200: login_response_schema})
-    def post(self, request, *args, **kwargs):
-        req = request.data  # try and find email in request
-        password = req.get('password')
-        username = req.get('username')
-        if username is None and password is None:
-            return Response({'success': False,
-                             'message': 'Missing or incorrect credentials',
-                             'data': req},
-                            status=status.HTTP_400_BAD_REQUEST)
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        # Add custom claims
         try:
-            user = User.objects.get(username=username)
-        except:
-            return Response({'success': False,
-                             'message': 'Usuário e/ou senha inválidos.',
-                             'data': req},
-                            status=status.HTTP_404_NOT_FOUND)
+            token['cliente'] = user.cliente.pk
+        except ObjectDoesNotExist:
+            token['cliente'] = None
+        token['is_staff'] = user.is_staff
+        #del token['token_type']
+        # ...
+        return token
 
-        if not user.check_password(password):
-            return Response({'success': False,
-                             'message': 'Usuário e/ou senha inválidos.',
-                             'data': req},
-                            status=status.HTTP_403_FORBIDDEN)
+    def validate(self, attrs):
+        carrinho = attrs.get('carrinho')
+        data = super().validate(attrs)
+        error = False
+        messages = []
+        try:
+            cliente = self.user.cliente
+        except ObjectDoesNotExist:
+            cliente = None
+            carrinho_pk = None
+        if carrinho and cliente:
+            try:
+                error, messages = cliente.carrinho.associar_itens(
+                    carrinho['itens_carrinho'])
+            except ObjectDoesNotExist:
+                cliente.carrinho = Carrinho.objects.create()
+                error, messages = cliente.carrinho.associar_itens(
+                    carrinho['itens_carrinho'])
+            carrinho_pk = cliente.carrinho.pk
+        refresh = self.get_token(self.user)
+        # data['refresh'] = str(refresh)
+        del data['refresh']
 
-        cliente = Cliente.objects.get(user=user)
-        print(cliente)
-        payload = jwt_payload_handler(cliente)
-        token = jwt_encode_handler(payload)
+        data['token'] = str(refresh.access_token)
 
-        carrinho_pk = request.data.get('carrinho', 0)
-        carrinho = get_object_or_404(Carrinho,
-                                     pk=carrinho_pk) if carrinho_pk else None
-        error, messages = False, []
-        if not cliente.carrinho:
-            cliente.carrinho = carrinho or Carrinho.objects.create()
-            cliente.save()
-        else:
-            if carrinho:
-                error, messages = cliente.carrinho.associar(carrinho)
+        del data['access']
+        data['carrinho'] = {'id': carrinho_pk,
+                            'error': error, 'messages': messages}
+        return data
 
-        if cliente.carrinho.itens_carrinho.count():
-            cliente.carrinho.atualizar_valor()
 
-        return Response({'token': token,
-                         'error': error,
-                         'messages': messages,
-                         'carrinho': cliente.carrinho.pk},
-                        status=status.HTTP_200_OK)
+user_login_schema = openapi.Schema(title='UserLogin', type=openapi.TYPE_OBJECT, properties={
+    'username': openapi.Schema(type=openapi.TYPE_STRING),
+    'password': openapi.Schema(type=openapi.TYPE_STRING),
+    'carrinho': openapi.Schema(title='Carrinho', type=openapi.TYPE_OBJECT, properties={
+        'itens': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(title='ItemCarrinho', type=openapi.TYPE_OBJECT, properties={
+            'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
+            'quantidade': openapi.Schema(type=openapi.TYPE_INTEGER)
+        }))
+    })
+}, required=['username', 'password'])
+
+
+@method_decorator(name='post', decorator=swagger_auto_schema(
+    request_body=user_login_schema, responses={200:
+                                               openapi.Schema(type=openapi.TYPE_OBJECT, properties={
+                                                   'token': openapi.Schema(type=openapi.TYPE_STRING),
+                                                   'carrinho': openapi.Schema(type=openapi.TYPE_OBJECT, properties={
+                                                       'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                                       'error': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                                       'messages': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_STRING))
+                                                   }),
+                                               }
+                                               )}
+))
+class AccTokenObtainView(TokenObtainPairView):
+    serializer_class = UserLoginSerializer
