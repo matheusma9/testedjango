@@ -4,8 +4,6 @@ from django.core.validators import RegexValidator
 from django.contrib.auth.models import AbstractUser
 from utils.models import ModelLog
 
-# Create your models here.
-
 
 class Cliente(ModelLog):
     SEXO = (('M', 'Masculino'), ('F', 'Feminino'))

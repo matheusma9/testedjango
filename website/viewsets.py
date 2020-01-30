@@ -429,7 +429,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
                                       type=openapi.TYPE_OBJECT,
                                       properties={
                                           'quantidade': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                          'produto': openapi.Schema(type=openapi.TYPE_INTEGER),
                                       })
     itens_post_body = openapi.Schema(title='ItemCarrinho',
                                      type=openapi.TYPE_OBJECT,
@@ -438,8 +437,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
                                      })
 
     @swagger_auto_schema(method='post', request_body=itens_post_body, responses={201: response_carrinho})
-    @swagger_auto_schema(method='patch', request_body=itens_patch_body, responses={201: response_carrinho})
-    @action(methods=['post', 'patch'], detail=True)
+    @action(methods=['post'], detail=True)
     def itens(self, request, pk):
         if request.method == 'POST':
             carrinho, error, messages = self.adicionar_item(
@@ -463,16 +461,21 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
         data['error'] = error
         return Response(data)
 
-    @action(methods=['delete'], detail=True, url_path='itens/(?P<produto_id>[^/.]+)')
-    def remover_item(self, request, pk, produto_id):
+    @swagger_auto_schema(method='patch', request_body=itens_patch_body, responses={201: response_carrinho})
+    @action(methods=['patch', 'delete'], detail=True, url_path='itens/(?P<produto_id>[^/.]+)')
+    def item_detail(self, request, pk, produto_id):
+        error, messages = False, []
         carrinho = self.get_object()
-        error = False
-        messages = []
-        created = False
         produto = get_object_or_404(Produto, pk=produto_id)
         item = get_object_or_404(
             ItemCarrinho, carrinho=carrinho, produto=produto)
-        item.delete()
+        if method == 'DELETE':
+            item.delete()
+        if method == 'PATCH':
+            quantidade, error, messages = produto.validar_qtd(
+                quantidade, error, messages)
+            item.quantidade = quantidade
+            item.save()
         serializer = CarrinhoSerializer(carrinho)
         data = serializer.data
         data['messages'] = messages
