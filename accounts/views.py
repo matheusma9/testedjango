@@ -33,7 +33,7 @@ from website.models import Carrinho
 # Create your views here.
 
 class UserLoginSerializer(TokenObtainPairSerializer):
-    carrinho = CarrinhoSerializer()
+    carrinho = CarrinhoSerializer(required=False)
 
     @classmethod
     def get_token(cls, user):
