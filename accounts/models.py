@@ -7,12 +7,6 @@ from utils.models import ModelLog
 # Create your models here.
 
 
-class User(AbstractUser):
-    email = models.EmailField('Email', unique=True)
-    cliente = models.OneToOneField(
-        'accounts.Cliente', on_delete=models.CASCADE, related_name='user')
-
-
 class Cliente(ModelLog):
     SEXO = (('M', 'Masculino'), ('F', 'Feminino'))
 
