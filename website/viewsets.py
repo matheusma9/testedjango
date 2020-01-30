@@ -438,19 +438,6 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
                                      })
 
     @swagger_auto_schema(method='post', request_body=itens_post_body, responses={201: response_carrinho})
-    @action(methods=['post'], detail=False, url_path='itens')
-    def first_itens(self, request):
-        produto, quantidade = get_fields(
-            request.data, ['produto', 'quantidade'])
-        carrinho, error, messages = self.adicionar_item(
-            request, request.data['produto'], request.data['quantidade'])
-        serializer = self.get_serializer(carrinho)
-        data = serializer.data
-        data['messages'] = messages
-        data['error'] = error
-        return Response(data)
-
-    @swagger_auto_schema(method='post', request_body=itens_post_body, responses={201: response_carrinho})
     @swagger_auto_schema(method='patch', request_body=itens_patch_body, responses={201: response_carrinho})
     @action(methods=['post', 'patch'], detail=True)
     def itens(self, request, pk):
