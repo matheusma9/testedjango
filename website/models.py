@@ -107,7 +107,10 @@ class Produto(ModelLog):
     @property
     def capa(self):
         capa = self.imagens.filter(capa=True).first()
-        return capa or capa.imagem
+        if capa:
+            return capa.imagem
+        else:
+            return None
 
     @property
     def rating(self):

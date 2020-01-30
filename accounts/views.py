@@ -57,7 +57,6 @@ class UserLoginSerializer(TokenObtainPairSerializer):
             cliente = self.user.cliente
         except ObjectDoesNotExist:
             cliente = None
-            carrinho_pk = None
         if carrinho and cliente:
             try:
                 error, messages = cliente.carrinho.associar_itens(
@@ -66,6 +65,7 @@ class UserLoginSerializer(TokenObtainPairSerializer):
                 cliente.carrinho = Carrinho.objects.create()
                 error, messages = cliente.carrinho.associar_itens(
                     carrinho['itens_carrinho'])
+        if cliente:
             carrinho_pk = cliente.carrinho.pk
         refresh = self.get_token(self.user)
         # data['refresh'] = str(refresh)
