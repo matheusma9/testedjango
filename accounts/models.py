@@ -13,8 +13,8 @@ class Cliente(ModelLog):
         upload_to='website/images/profile', verbose_name='Foto',
         null=True, blank=True)
     sobrenome = models.CharField('Sobrenome', max_length=150)
-    cpf = models.CharField('CPF', unique=True, max_length=14, validators=[
-                           RegexValidator(regex=r'^\d{3}\.\d{3}\.\d{3}\-\d{2}$')])
+    cpf = models.CharField('CPF', unique=True, max_length=11, validators=[
+                           RegexValidator(regex=r'^\d{11}$')])
     rg = models.CharField(
         'RG', unique=True, max_length=20, blank=True, null=True,  validators=[
             RegexValidator(regex=r'^\d+$')])
