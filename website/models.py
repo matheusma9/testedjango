@@ -108,7 +108,7 @@ class Produto(ModelLog):
     def capa(self):
         capa = self.imagens.filter(capa=True).first()
         if capa:
-            return capa.imagem
+            return capa
         else:
             return None
 

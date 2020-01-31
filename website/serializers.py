@@ -105,12 +105,13 @@ class ProdutoSerializer(serializers.ModelSerializer):
     categorias = CategoriaSerializer(many=True)
     imagens = ImagemProdutoSerializer(
         many=True, required=False)
+    capa = Base64ImageField(allow_null=True, required=False)
 
     class Meta:
         model = Produto
         fields = ['id', 'descricao', 'descricao_completa', 'valor', 'imagens', 'capa',
                   'qtd_estoque', 'categorias', 'qtd_limite', 'rating']
-        read_only_fields = ['id', 'rating', 'capa']
+        read_only_fields = ['id', 'rating']
 
     def create(self, validated_data):
         categorias = validated_data.pop('categorias')
