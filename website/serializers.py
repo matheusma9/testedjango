@@ -158,7 +158,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
 
 
 class ProdutoListSerializer(serializers.ModelSerializer):
-    capa = Base64ImageField()
+    capa = Base64ImageField(allow_null=True, required=False)
 
     class Meta:
         model = Produto
