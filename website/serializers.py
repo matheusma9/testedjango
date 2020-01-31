@@ -17,29 +17,6 @@ from slugify import slugify
 from collections import OrderedDict
 
 
-class ItemCarrinhoSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = ItemCarrinho
-        fields = ['id', 'valor', 'quantidade', 'produto']
-        read_only_fields = ['id', 'valor']
-
-
-class CarrinhoSerializer(serializers.ModelSerializer):
-    itens = ItemCarrinhoSerializer(source="itens_carrinho", many=True)
-
-    @property
-    def data(self):
-        if self.instance is not None:
-            self.instance.atualizar_valor()
-        return super().data
-
-    class Meta:
-        model = Carrinho
-        fields = ['id', 'valor_total', 'itens']
-        read_only_fields = ['id']
-
-
 class EnderecoSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -252,3 +229,50 @@ class OfertaSerializer(serializers.ModelSerializer):
         oferta = Oferta.objects.create(
             foto=foto, owner=owner, **validated_data)
         return oferta
+
+
+class ItemCarrinhoRetrieveSerializer(serializers.ModelSerializer):
+    produto = ProdutoListSerializer()
+
+    class Meta:
+        model = ItemCarrinho
+        fields = ['id', 'valor', 'quantidade', 'produto']
+        read_only_fields = ['id', 'valor']
+
+
+class CarrinhoRetrieveSerializer(serializers.ModelSerializer):
+    itens = ItemCarrinhoRetrieveSerializer(source="itens_carrinho", many=True)
+
+    @property
+    def data(self):
+        if self.instance is not None:
+            self.instance.atualizar_valor()
+        return super().data
+
+    class Meta:
+        model = Carrinho
+        fields = ['id', 'valor_total', 'itens']
+        read_only_fields = ['id']
+
+
+class ItemCarrinhoSerializer(serializers.ModelSerializer):
+    produto = ProdutoListSerializer()
+
+    class Meta:
+        model = ItemCarrinho
+        fields = ['id', 'valor', 'quantidade', 'produto']
+        read_only_fields = ['id', 'valor']
+
+
+class CarrinhoSerializer(serializers.ModelSerializer):
+
+    @property
+    def data(self):
+        if self.instance is not None:
+            self.instance.atualizar_valor()
+        return super().data
+
+    class Meta:
+        model = Carrinho
+        fields = ['id', 'valor_total', 'itens']
+        read_only_fields = ['id']

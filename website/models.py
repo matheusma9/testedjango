@@ -274,6 +274,11 @@ class ItemCarrinho(ModelLog):
 
 
 class Venda(ModelLog):
+    STATUS = (
+        'CONFIRMADA',
+        'CANCELADA',
+        'PENDENTE'
+    )
     produtos = models.ManyToManyField(
         'website.Produto', through='ItemVenda', related_name='vendas')
     cliente = models.ForeignKey(
@@ -282,6 +287,7 @@ class Venda(ModelLog):
         'Valor', max_digits=10, decimal_places=2, blank=True, default=Decimal('0.00'))
     endereco_entrega = models.ForeignKey(
         'website.Endereco', on_delete=models.CASCADE, related_name='vendas', null=True, blank=True)
+    #status = models.CharField('')
 
     def atualizar_valor(self):
         expression = Sum(F('valor') * F('quantidade'),

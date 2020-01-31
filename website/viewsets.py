@@ -384,7 +384,7 @@ class CarrinhoViewSet(mixins.RetrieveModelMixin,
     """
     Endpoint relacionado aos carrinhos.
     """
-    serializer_class = CarrinhoSerializer
+    serializer_class = CarrinhoRetrieveSerializer
     queryset = Carrinho.objects.all()
     permission_classes = [CarrinhoPermission]
 
